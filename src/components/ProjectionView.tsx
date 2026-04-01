@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart3, PieChart, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, addMonths, startOfMonth } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { Purchase } from '../types';
 
+import type { ProjectionSettings } from '../types';
+
 interface ProjectionViewProps {
     purchases: Purchase[];
     currentPrice: number;
+    ticker: string;
 }
 
 interface ProjectionDataPoint {
@@ -22,7 +25,7 @@ interface ProjectionDataPoint {
     type: 'Actual' | 'Projected';
 }
 
-const ProjectionView = ({ purchases }: ProjectionViewProps) => {
+const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
     const [projectedMonthlyStack, setProjectedMonthlyStack] = useState<string>('200');
     const [decayMonths, setDecayMonths] = useState<string>('20');
     const [projectedCost, setProjectedCost] = useState<string>('100');
@@ -34,6 +37,51 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
     const [useTaper, setUseTaper] = useState<boolean>(true);
     const [projectionOpen, setProjectionOpen] = useState<boolean>(true);
     const [showHistory, setShowHistory] = useState<boolean>(false);
+
+    // Load saved settings when ticker changes
+    useEffect(() => {
+        if (!ticker) return;
+        fetch(`http://localhost:5001/api/projection-settings/${ticker}`)
+            .then(res => res.json())
+            .then((settings: ProjectionSettings) => {
+                if (settings && Object.keys(settings).length > 0) {
+                    setProjectedMonthlyStack(settings.monthlyStack);
+                    setDecayMonths(settings.decayMonths);
+                    setProjectedCost(settings.stockPrice);
+                    setDividendInput(settings.dividendInput);
+                    setTaperDate(settings.taperDate);
+                    setTaperLength(settings.taperLength);
+                    setTargetIncome(settings.targetIncome);
+                    setProjectionLength(settings.projectionLength);
+                    setUseTaper(settings.useTaper);
+                }
+            })
+            .catch(err => console.error('Error loading projection settings:', err));
+    }, [ticker]);
+
+    // Debounced save whenever settings change
+    useEffect(() => {
+        if (!ticker) return;
+        const timer = setTimeout(() => {
+            fetch(`http://localhost:5001/api/projection-settings/${ticker}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    monthlyStack: projectedMonthlyStack,
+                    decayMonths,
+                    stockPrice: projectedCost,
+                    dividendInput,
+                    taperDate,
+                    taperLength,
+                    targetIncome,
+                    projectionLength,
+                    useTaper,
+                } satisfies ProjectionSettings),
+            }).catch(err => console.error('Error saving projection settings:', err));
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [ticker, projectedMonthlyStack, decayMonths, projectedCost, dividendInput,
+        taperDate, taperLength, targetIncome, projectionLength, useTaper]);
 
     if (purchases.length === 0) {
         return (

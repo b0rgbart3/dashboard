@@ -4,10 +4,12 @@ import PurchaseForm from './components/PurchaseForm';
 import DividendForm from './components/DividendForm';
 import HistoryTable from './components/HistoryTable';
 import ProjectionView from './components/ProjectionView';
+import StockNavigator from './components/StockNavigator';
+import AddStockModal from './components/AddStockModal';
 import { TrendingUp, History, BarChart3, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, parse, startOfMonth } from 'date-fns';
-import type { Purchase, Dividend, CombinedEntry } from './types';
+import type { Purchase, Dividend, CombinedEntry, Stock } from './types';
 
 interface HistoricalDataPoint {
     timestamp: number;    // Unix ms — numeric XAxis dataKey
@@ -18,25 +20,42 @@ interface HistoricalDataPoint {
 }
 
 const Dashboard = () => {
+    const [stocks, setStocks] = useState<Stock[]>([]);
+    const [currentStockIndex, setCurrentStockIndex] = useState<number>(0);
+    const [showAddStockModal, setShowAddStockModal] = useState<boolean>(false);
     const [purchases, setPurchases] = useState<Purchase[]>([]);
     const [dividends, setDividends] = useState<Dividend[]>([]);
     const [currentPrice, setCurrentPrice] = useState<number>(100.06);
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [historyOpen, setHistoryOpen] = useState<boolean>(true);
 
+    const currentStock = stocks[currentStockIndex] ?? null;
+    const currentTicker = currentStock?.ticker ?? '';
+
     useEffect(() => {
-        fetch('http://localhost:5001/api/purchases')
+        fetch('http://localhost:5001/api/stocks')
             .then(res => res.json())
-            .then((data: Purchase[]) => setPurchases(data))
-            .catch(err => console.error('Error fetching purchases:', err));
+            .then((data: Stock[]) => setStocks(data))
+            .catch(err => console.error('Error fetching stocks:', err));
     }, []);
 
     useEffect(() => {
-        fetch('http://localhost:5001/api/dividends')
+        if (!currentTicker) return;
+        setPurchases([]);
+        fetch(`http://localhost:5001/api/purchases?ticker=${currentTicker}`)
+            .then(res => res.json())
+            .then((data: Purchase[]) => setPurchases(data))
+            .catch(err => console.error('Error fetching purchases:', err));
+    }, [currentTicker]);
+
+    useEffect(() => {
+        if (!currentTicker) return;
+        setDividends([]);
+        fetch(`http://localhost:5001/api/dividends?ticker=${currentTicker}`)
             .then(res => res.json())
             .then((data: Dividend[]) => setDividends(data))
             .catch(err => console.error('Error fetching dividends:', err));
-    }, []);
+    }, [currentTicker]);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -50,7 +69,7 @@ const Dashboard = () => {
             const res = await fetch('http://localhost:5001/api/purchases', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(purchase)
+                body: JSON.stringify({ ...purchase, ticker: currentTicker })
             });
             if (res.ok) {
                 const savedPurchase: Purchase = await res.json();
@@ -66,10 +85,11 @@ const Dashboard = () => {
 
     const importPurchases = async (entries: Purchase[]): Promise<void> => {
         try {
+            const tagged = entries.map(e => ({ ...e, ticker: currentTicker }));
             const res = await fetch('http://localhost:5001/api/purchases/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(entries)
+                body: JSON.stringify(tagged)
             });
             if (res.ok) {
                 const saved: Purchase[] = await res.json();
@@ -88,7 +108,7 @@ const Dashboard = () => {
             const res = await fetch('http://localhost:5001/api/dividends', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(dividend)
+                body: JSON.stringify({ ...dividend, ticker: currentTicker })
             });
             if (res.ok) {
                 const savedDividend: Dividend = await res.json();
@@ -104,10 +124,11 @@ const Dashboard = () => {
 
     const importDividends = async (entries: Dividend[]): Promise<void> => {
         try {
+            const tagged = entries.map(e => ({ ...e, ticker: currentTicker }));
             const res = await fetch('http://localhost:5001/api/dividends/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(entries)
+                body: JSON.stringify(tagged)
             });
             if (res.ok) {
                 const saved: Dividend[] = await res.json();
@@ -138,6 +159,38 @@ const Dashboard = () => {
             console.error('Error deleting entry:', err);
         }
     };
+
+    const handleAddStock = async (name: string, ticker: string): Promise<void> => {
+        try {
+            const newStock: Stock = {
+                id: ticker,
+                ticker,
+                name,
+                createdAt: new Date().toISOString().split('T')[0]
+            };
+            const res = await fetch('http://localhost:5001/api/stocks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newStock)
+            });
+            if (res.ok) {
+                const saved: Stock = await res.json();
+                setStocks(prev => {
+                    const updated = [...prev, saved];
+                    setCurrentStockIndex(updated.length - 1);
+                    return updated;
+                });
+                setShowAddStockModal(false);
+            } else if (res.status === 409) {
+                alert(`Stock ${ticker} already exists.`);
+            }
+        } catch (err) {
+            console.error('Error adding stock:', err);
+        }
+    };
+
+    const goToPrev = () => setCurrentStockIndex(i => Math.max(0, i - 1));
+    const goToNext = () => setCurrentStockIndex(i => Math.min(stocks.length - 1, i + 1));
 
     const getHistoricalData = (): HistoricalDataPoint[] => {
         const dayMap = new Map<string, { qty: number; cost: number; lastPrice: number }>();
@@ -220,11 +273,34 @@ const Dashboard = () => {
         return ticks;
     })();
 
+    if (stocks.length === 0) {
+        return (
+            <div className="dashboard-container flex items-center justify-center" style={{ minHeight: '60vh' }}>
+                <div className="text-text-secondary italic">Loading...</div>
+            </div>
+        );
+    }
+
     return (
         <div className="dashboard-container">
-            <header className="mb-8">
-                <Ticker symbol="STRC" price={currentPrice} />
+            <StockNavigator
+                stocks={stocks}
+                currentIndex={currentStockIndex}
+                onPrev={goToPrev}
+                onNext={goToNext}
+                onAddStock={() => setShowAddStockModal(true)}
+            />
+
+            <header className="mb-8 mt-4">
+                <Ticker symbol={currentTicker} name={currentStock?.name} price={currentPrice} />
             </header>
+
+            {showAddStockModal && (
+                <AddStockModal
+                    onAdd={handleAddStock}
+                    onClose={() => setShowAddStockModal(false)}
+                />
+            )}
 
             <main className="grid gap-8">
                 <section className="glass-card">
@@ -363,7 +439,7 @@ const Dashboard = () => {
                     </div>
                 </section>
 
-                <ProjectionView purchases={purchases} currentPrice={currentPrice} />
+                <ProjectionView purchases={purchases} currentPrice={currentPrice} ticker={currentTicker} />
             </main>
         </div>
     );

@@ -13,6 +13,8 @@ const app = express();
 const PORT = 5001;
 const DATA_FILE = path.join(__dirname, 'data', 'purchases.json');
 const DIVIDENDS_FILE = path.join(__dirname, 'data', 'dividends.json');
+const STOCKS_FILE = path.join(__dirname, 'data', 'stocks.json');
+const PROJECTION_SETTINGS_FILE = path.join(__dirname, 'data', 'projection-settings.json');
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -33,14 +35,47 @@ if (!fs.existsSync(DIVIDENDS_FILE)) {
     fs.writeFileSync(DIVIDENDS_FILE, JSON.stringify([]));
 }
 
-// GET purchases
-app.get('/api/purchases', (_req: Request, res: Response) => {
+// Migration: backfill ticker="STRC" on all legacy records missing the field
+function migrateTickerField(filePath: string): void {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const records: Array<Record<string, unknown>> = JSON.parse(raw);
+    let dirty = false;
+    for (const r of records) {
+        if (!r.ticker) {
+            r.ticker = 'STRC';
+            dirty = true;
+        }
+    }
+    if (dirty) fs.writeFileSync(filePath, JSON.stringify(records, null, 2));
+}
+migrateTickerField(DATA_FILE);
+migrateTickerField(DIVIDENDS_FILE);
+
+// Seed stocks.json if it doesn't exist
+if (!fs.existsSync(STOCKS_FILE)) {
+    fs.writeFileSync(STOCKS_FILE, JSON.stringify([
+        { id: 'STRC', ticker: 'STRC', name: 'Strategy Inc', createdAt: new Date().toISOString().split('T')[0] }
+    ], null, 2));
+}
+
+// Seed projection-settings.json if it doesn't exist
+if (!fs.existsSync(PROJECTION_SETTINGS_FILE)) {
+    fs.writeFileSync(PROJECTION_SETTINGS_FILE, JSON.stringify({}));
+}
+
+// GET purchases (optional ?ticker= filter)
+app.get('/api/purchases', (req: Request, res: Response) => {
+    const ticker = req.query.ticker as string | undefined;
     fs.readFile(DATA_FILE, 'utf8', (err, data) => {
         if (err) {
             console.error(err);
             return res.status(500).send('Error reading data file');
         }
-        res.json(JSON.parse(data));
+        let purchases = JSON.parse(data);
+        if (ticker) {
+            purchases = purchases.filter((p: { ticker?: string }) => p.ticker === ticker);
+        }
+        res.json(purchases);
     });
 });
 
@@ -126,11 +161,16 @@ app.post('/api/purchases/bulk', (req: Request, res: Response) => {
     });
 });
 
-// GET dividends
-app.get('/api/dividends', (_req: Request, res: Response) => {
+// GET dividends (optional ?ticker= filter)
+app.get('/api/dividends', (req: Request, res: Response) => {
+    const ticker = req.query.ticker as string | undefined;
     fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading dividends file');
-        res.json(JSON.parse(data));
+        let dividends = JSON.parse(data);
+        if (ticker) {
+            dividends = dividends.filter((d: { ticker?: string }) => d.ticker === ticker);
+        }
+        res.json(dividends);
     });
 });
 
@@ -179,6 +219,74 @@ app.post('/api/dividends/bulk', (req: Request, res: Response) => {
         fs.writeFile(DIVIDENDS_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing dividends file');
             res.status(201).json(newDividends);
+        });
+    });
+});
+
+// GET stocks
+app.get('/api/stocks', (_req: Request, res: Response) => {
+    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading stocks file');
+        res.json(JSON.parse(data));
+    });
+});
+
+// POST stock (add new stock)
+app.post('/api/stocks', (req: Request, res: Response) => {
+    const newStock = req.body;
+    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading stocks file');
+        const stocks: Array<{ ticker: string }> = JSON.parse(data);
+        if (stocks.some(s => s.ticker === newStock.ticker)) {
+            return res.status(409).json({ error: 'Stock already exists' });
+        }
+        stocks.push(newStock);
+        fs.writeFile(STOCKS_FILE, JSON.stringify(stocks, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing stocks file');
+            res.status(201).json(newStock);
+        });
+    });
+});
+
+// DELETE stock
+app.delete('/api/stocks/:ticker', (req: Request, res: Response) => {
+    const ticker = req.params.ticker;
+    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading stocks file');
+        let stocks: Array<{ ticker: string }> = JSON.parse(data);
+        const originalLength = stocks.length;
+        stocks = stocks.filter(s => s.ticker !== ticker);
+        if (stocks.length === originalLength) {
+            return res.status(404).json({ error: 'Stock not found' });
+        }
+        fs.writeFile(STOCKS_FILE, JSON.stringify(stocks, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing stocks file');
+            res.status(200).json({ message: 'Stock deleted', ticker });
+        });
+    });
+});
+
+// GET projection settings for a ticker
+app.get('/api/projection-settings/:ticker', (req: Request, res: Response) => {
+    const ticker = req.params.ticker;
+    fs.readFile(PROJECTION_SETTINGS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading projection settings file');
+        const all = JSON.parse(data);
+        res.json(all[ticker] ?? {});
+    });
+});
+
+// PUT projection settings for a ticker
+app.put('/api/projection-settings/:ticker', (req: Request, res: Response) => {
+    const ticker = req.params.ticker;
+    const settings = req.body;
+    fs.readFile(PROJECTION_SETTINGS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading projection settings file');
+        const all = JSON.parse(data);
+        all[ticker] = settings;
+        fs.writeFile(PROJECTION_SETTINGS_FILE, JSON.stringify(all, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing projection settings file');
+            res.status(200).json(settings);
         });
     });
 });
