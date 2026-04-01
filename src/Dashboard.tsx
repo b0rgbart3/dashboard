@@ -142,19 +142,26 @@ const Dashboard = () => {
     const getHistoricalData = (): HistoricalDataPoint[] => {
         const dayMap = new Map<string, { qty: number; cost: number; lastPrice: number }>();
 
-        const sorted = [...purchases].sort(
+        const sorted = [...purchases, ...dividends.map(d => ({ ...d, type: 'dividend' as const }))].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
         );
 
         for (const p of sorted) {
-            const dayKey = p.date; // already "yyyy-MM-dd"
+            const dayKey = p.date;
             const existing = dayMap.get(dayKey);
+            const isDividend = 'type' in p && p.type === 'dividend';
             if (existing) {
                 existing.qty += p.quantity;
-                existing.cost += p.price * p.quantity;
-                existing.lastPrice = p.price;
+                if (!isDividend) {
+                    existing.cost += p.price * p.quantity;
+                    existing.lastPrice = p.price;
+                }
             } else {
-                dayMap.set(dayKey, { qty: p.quantity, cost: p.price * p.quantity, lastPrice: p.price });
+                dayMap.set(dayKey, {
+                    qty: p.quantity,
+                    cost: isDividend ? 0 : p.price * p.quantity,
+                    lastPrice: isDividend ? 0 : p.price,
+                });
             }
         }
 
@@ -162,17 +169,19 @@ const Dashboard = () => {
 
         let runningQty = 0;
         let runningCost = 0;
+        let lastKnownPrice = 0;
         const result: HistoricalDataPoint[] = [];
 
         for (const dayKey of sortedDayKeys) {
             const data = dayMap.get(dayKey)!;
             runningQty += data.qty;
             runningCost += data.cost;
+            if (data.lastPrice > 0) lastKnownPrice = data.lastPrice;
             const parsedDate = parse(dayKey, 'yyyy-MM-dd', new Date());
             result.push({
                 timestamp: parsedDate.getTime(),
                 displayDate: format(parsedDate, 'MMM d, yyyy'),
-                value: +(runningQty * data.lastPrice).toFixed(2),
+                value: +(runningQty * lastKnownPrice).toFixed(2),
                 cost: +runningCost.toFixed(2),
                 qty: runningQty,
             });
@@ -261,11 +270,11 @@ const Dashboard = () => {
                         <h2 className="ml-2">Accumulation Graph</h2>
                         <div className="flex items-center gap-4" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
                             <div className="flex items-center gap-2">
-                                <div style={{ width: '24px', height: '3px', background: 'var(--primary-purple)', borderRadius: '2px' }} />
+                                <div style={{ width: '24px', height: '0', borderTop: '2px dashed var(--primary-blue)' }} />
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Current Value</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div style={{ width: '24px', height: '0', borderTop: '2px dashed var(--primary-blue)' }} />
+                                <div style={{ width: '24px', height: '3px', background: 'var(--primary-purple)', borderRadius: '2px' }} />
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Total Spent</span>
                             </div>
                         </div>
@@ -275,7 +284,7 @@ const Dashboard = () => {
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={historicalData}>
                                     <defs>
-                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                        <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="var(--primary-purple)" stopOpacity={0.3} />
                                             <stop offset="95%" stopColor="var(--primary-purple)" stopOpacity={0} />
                                         </linearGradient>
@@ -302,32 +311,47 @@ const Dashboard = () => {
                                     />
                                     <Tooltip
                                         contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', borderRadius: '8px' }}
-                                        itemStyle={{ color: 'var(--text-primary)' }}
-                                        labelFormatter={(ts: number) => {
-                                            const point = historicalData.find(d => d.timestamp === ts);
-                                            return point ? point.displayDate : format(new Date(ts), 'MMM d, yyyy');
+                                        content={({ active, payload, label }) => {
+                                            if (!active || !payload?.length) return null;
+                                            const point = historicalData.find(d => d.timestamp === label);
+                                            const displayDate = point ? point.displayDate : format(new Date(label as number), 'MMM d, yyyy');
+                                            const colorMap: Record<string, string> = {
+                                                'Total Spent': 'var(--primary-purple)',
+                                                'Current Value': 'var(--primary-blue)',
+                                            };
+                                            return (
+                                                <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '10px 14px' }}>
+                                                    <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>{displayDate}</p>
+                                                    {[...payload].reverse().map((entry) => (
+                                                        <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                            <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorMap[entry.name as string] ?? entry.color, flexShrink: 0 }} />
+                                                            <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{entry.name}:</span>
+                                                            <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+                                                                ${(entry.value as number).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
                                         }}
-                                        formatter={(value: number) =>
-                                            `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                        }
-                                    />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="value"
-                                        stroke="var(--primary-purple)"
-                                        fillOpacity={1}
-                                        fill="url(#colorValue)"
-                                        strokeWidth={3}
-                                        name="Current Value"
                                     />
                                     <Area
                                         type="monotone"
                                         dataKey="cost"
+                                        stroke="var(--primary-purple)"
+                                        fillOpacity={1}
+                                        fill="url(#colorCost)"
+                                        strokeWidth={3}
+                                        name="Total Spent"
+                                    />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="value"
                                         stroke="var(--primary-blue)"
                                         fill="transparent"
                                         strokeWidth={2}
                                         strokeDasharray="5 5"
-                                        name="Total Spent"
+                                        name="Current Value"
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>

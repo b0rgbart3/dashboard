@@ -30,6 +30,8 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
     const [taperDate, setTaperDate] = useState<string>('2028-05');
     const [taperLength, setTaperLength] = useState<string>('12');
     const [targetIncome, setTargetIncome] = useState<string>('2400');
+    const [projectionLength, setProjectionLength] = useState<string>('60');
+    const [useTaper, setUseTaper] = useState<boolean>(true);
     const [projectionOpen, setProjectionOpen] = useState<boolean>(true);
     const [showHistory, setShowHistory] = useState<boolean>(false);
 
@@ -47,10 +49,6 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
 
     const totalQty = purchases.reduce((sum, p) => sum + p.quantity, 0);
 
-    const daysDiff = Math.max(1, (lastDate.getTime() - new Date(sortedPurchases[0].date).getTime()) / (1000 * 60 * 60 * 24));
-    const calcAvgMonthlyQty = sortedPurchases.length > 1
-        ? totalQty / (daysDiff / 30.44)
-        : 10;
 
     const monthlyStackInput = parseFloat(projectedMonthlyStack);
     const monthlyStack = !isNaN(monthlyStackInput) && monthlyStackInput > 0 ? monthlyStackInput : 0;
@@ -86,7 +84,8 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
     let prevDividend = baseDividend;
     let runningSpent = baseValue;
     let runningIncome = 0;
-    for (let i = 1; i <= 60; i++) {
+    const projMonths = Math.max(1, parseInt(projectionLength) || 60);
+    for (let i = 1; i <= projMonths; i++) {
         const nextDate = addMonths(startOfMonth(lastDate), i);
         const effectiveStack = decay > 0
             ? Math.max(0, monthlyStack - (i - 1) * (monthlyStack / decay))
@@ -94,23 +93,35 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
         runningQty += effectiveStack;
         const rowMonthlyCost = effectiveStack * monthlyCost;
 
-        // Compute taper factor: how much of the dividend is still reinvested
-        let taperFactor = 1;
-        if (taperDateValue && taperLen > 0) {
-            const monthsIntotaper =
-                (nextDate.getFullYear() - taperDateValue.getFullYear()) * 12 +
-                (nextDate.getMonth() - taperDateValue.getMonth());
-            if (monthsIntotaper >= 0) {
-                taperFactor = Math.max(0, (taperLen - monthsIntotaper) / taperLen);
-            }
-        }
-        let reinvestedDividend = +(prevDividend * taperFactor).toFixed(2);
-        let monthlyIncome = +(prevDividend - reinvestedDividend).toFixed(2);
+        let reinvestedDividend: number;
+        let monthlyIncome: number;
 
-        // Once monthly income exceeds the target, cap it and reinvest the surplus
-        if (targetIncomeValue > 0 && monthlyIncome > targetIncomeValue) {
-            monthlyIncome = targetIncomeValue;
-            reinvestedDividend = +(prevDividend - monthlyIncome).toFixed(2);
+        if (useTaper) {
+            // Taper mode: linearly shift dividends from reinvestment to income
+            let taperFactor = 1;
+            if (taperDateValue && taperLen > 0) {
+                const monthsIntotaper =
+                    (nextDate.getFullYear() - taperDateValue.getFullYear()) * 12 +
+                    (nextDate.getMonth() - taperDateValue.getMonth());
+                if (monthsIntotaper >= 0) {
+                    taperFactor = Math.max(0, (taperLen - monthsIntotaper) / taperLen);
+                }
+            }
+            reinvestedDividend = +(prevDividend * taperFactor).toFixed(2);
+            monthlyIncome = +(prevDividend - reinvestedDividend).toFixed(2);
+            if (targetIncomeValue > 0 && monthlyIncome > targetIncomeValue) {
+                monthlyIncome = targetIncomeValue;
+                reinvestedDividend = +(prevDividend - monthlyIncome).toFixed(2);
+            }
+        } else {
+            // Threshold mode: reinvest everything until dividend reaches target, then take target as income
+            if (targetIncomeValue > 0 && prevDividend >= targetIncomeValue) {
+                monthlyIncome = targetIncomeValue;
+                reinvestedDividend = +(prevDividend - monthlyIncome).toFixed(2);
+            } else {
+                monthlyIncome = 0;
+                reinvestedDividend = prevDividend;
+            }
         }
         runningIncome = +(runningIncome + monthlyIncome).toFixed(2);
 
@@ -182,6 +193,9 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
     const targetIncomeHit = targetIncomeValue > 0
         ? projectionData.find(d => d.income >= targetIncomeValue) ?? null
         : null;
+    const targetMonthlyIncomeHit = targetIncomeValue > 0
+        ? projectionData.find(d => d.monthlyIncome >= targetIncomeValue) ?? null
+        : null;
 
     const decayZeroHit = decay > 0 && monthlyStack > 0
         ? projectionData.find((d, i) => i > 0 && d.monthlyCost === 0 && projectionData[i - 1].monthlyCost > 0) ?? null
@@ -204,107 +218,50 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
             >
                 <div className="flex items-center gap-2">
                     <PieChart className="text-accent-orange" size={24} />
-                    <h2>5 Year Projection</h2>
+                    <h2>{projMonths % 12 === 0 ? `${projMonths / 12} Year` : `${projMonths} Month`} Projection</h2>
                 </div>
                 {projectionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
             {projectionOpen && <div className="space-y-8">
-            <div className="grid grid-cols-4 gap-4">
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Monthly Stack (qty)
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder={`e.g. ${calcAvgMonthlyQty.toFixed(2)} (historical avg)`}
-                        value={projectedMonthlyStack}
-                        onChange={e => setProjectedMonthlyStack(e.target.value)}
-                        className="input"
-                    />
-                </div>
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Decay (months)
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="e.g. 12"
-                        value={decayMonths}
-                        onChange={e => setDecayMonths(e.target.value)}
-                        className="input"
-                    />
-                </div>
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Stock Price
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={projectedCost}
-                        onChange={e => setProjectedCost(e.target.value)}
-                        className="input"
-                    />
-                </div>
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Dividend (%)
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={dividendInput}
-                        onChange={e => setDividendInput(e.target.value)}
-                        className="input"
-                    />
-                </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Target Income ($)
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="e.g. 5000"
-                        value={targetIncome}
-                        onChange={e => setTargetIncome(e.target.value)}
-                        className="input"
-                    />
-                </div>
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Taper Date
-                    </label>
-                    <input
-                        type="month"
-                        value={taperDate}
-                        onChange={e => setTaperDate(e.target.value)}
-                        className="input"
-                    />
-                </div>
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                        Taper Length (months)
-                    </label>
-                    <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        placeholder="e.g. 12"
-                        value={taperLength}
-                        onChange={e => setTaperLength(e.target.value)}
-                        className="input"
-                    />
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '10px 24px', alignItems: 'center' }}>
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Monthly Stack (qty)</label>
+                <input type="number" min="0" step="any" placeholder="qty" value={projectedMonthlyStack} onChange={e => setProjectedMonthlyStack(e.target.value)} className="input" />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Decay (months)</label>
+                <input type="number" min="0" step="any" placeholder="months" value={decayMonths} onChange={e => setDecayMonths(e.target.value)} className="input" />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Stock Price</label>
+                <input type="number" min="0" step="any" value={projectedCost} onChange={e => setProjectedCost(e.target.value)} className="input" />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Dividend (%)</label>
+                <input type="number" min="0" step="any" value={dividendInput} onChange={e => setDividendInput(e.target.value)} className="input" />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Target Income ($)</label>
+                <input type="number" min="0" step="any" placeholder="e.g. 5000" value={targetIncome} onChange={e => setTargetIncome(e.target.value)} className="input" />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Projection Length (months)</label>
+                <input type="number" min="1" step="1" placeholder="months" value={projectionLength} onChange={e => setProjectionLength(e.target.value)} className="input" />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    Taper Date
+                    <button
+                        onClick={() => setUseTaper(prev => !prev)}
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            padding: '2px 8px', borderRadius: '12px', fontSize: '10px',
+                            fontWeight: 700, border: 'none', cursor: 'pointer',
+                            background: useTaper ? 'var(--primary-purple)' : 'rgba(255,255,255,0.1)',
+                            color: useTaper ? 'white' : 'var(--text-secondary)',
+                            transition: 'all 0.2s',
+                        }}
+                    >
+                        {useTaper ? 'ON' : 'OFF'}
+                    </button>
+                </label>
+                <input type="month" value={taperDate} onChange={e => setTaperDate(e.target.value)} className="input" disabled={!useTaper} style={{ opacity: useTaper ? 1 : 0.35 }} />
+
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide" style={{ opacity: useTaper ? 1 : 0.35 }}>Taper Length (months)</label>
+                <input type="number" min="1" step="1" placeholder="months" value={taperLength} onChange={e => setTaperLength(e.target.value)} className="input" disabled={!useTaper} style={{ opacity: useTaper ? 1 : 0.35 }} />
             </div>
 
             <div className="h-80 w-100">
@@ -367,8 +324,18 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {projectionData.map((d, i) => (
-                            <tr key={i} style={i === 0 ? { backgroundColor: 'rgba(74, 222, 128, 0.12)' } : {}}>
+                        {projectionData.map((d, i) => {
+                            const year = d.date.split(' ')[1];
+                            const prevYear = i > 0 ? projectionData[i - 1].date.split(' ')[1] : null;
+                            const isYearBoundary = i > 0 && year !== prevYear;
+                            const isTargetRow = targetMonthlyIncomeHit && d.date === targetMonthlyIncomeHit.date;
+                            const isFirstRow = i === 0;
+                            return (
+                            <tr key={i} style={{
+                                ...(isTargetRow ? { backgroundColor: 'rgba(167, 139, 250, 0.18)', boxShadow: 'inset 0 0 0 1px rgba(167, 139, 250, 0.4)' }
+                                    : isFirstRow ? { backgroundColor: 'rgba(74, 222, 128, 0.12)' } : {}),
+                                ...(isYearBoundary ? { borderTop: '2px solid rgba(255,255,255,0.6)' } : {}),
+                            }}>
                                 <td>{d.displayDate}</td>
                                 <td className="font-mono text-text-secondary">
                                     {d.monthlyCost > 0 ? `$${Math.trunc(d.monthlyCost).toLocaleString()}` : '—'}
@@ -395,7 +362,8 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
                                     {d.income > 0 ? `$${Math.trunc(d.income).toLocaleString()}` : '—'}
                                 </td>
                             </tr>
-                        ))}
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -433,7 +401,7 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
                             <div style={{ width: '24px', height: '3px', background: 'var(--primary-blue)', borderRadius: '2px' }} />
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Dividend (right axis)</span>
                         </div>
-                        {taperDateLabel && (
+                        {useTaper && taperDateLabel && (
                             <div className="flex items-center gap-2">
                                 <div style={{ width: '24px', height: '0', borderTop: '2px dashed var(--accent-orange, #f97316)' }} />
                                 <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Taper Start</span>
@@ -546,7 +514,7 @@ const ProjectionView = ({ purchases }: ProjectionViewProps) => {
                                     }}
                                 />
                             ))}
-                            {taperDateLabel && (
+                            {useTaper && taperDateLabel && (
                                 <ReferenceLine
                                     x={taperDateLabel}
                                     yAxisId="left"
