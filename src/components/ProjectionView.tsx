@@ -10,6 +10,7 @@ interface ProjectionViewProps {
     purchases: Purchase[];
     currentPrice: number;
     ticker: string;
+    hasDividends: boolean;
 }
 
 interface ProjectionDataPoint {
@@ -25,7 +26,7 @@ interface ProjectionDataPoint {
     type: 'Actual' | 'Projected';
 }
 
-const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
+const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps) => {
     const [projectedMonthlyStack, setProjectedMonthlyStack] = useState<string>('200');
     const [decayMonths, setDecayMonths] = useState<string>('20');
     const [projectedCost, setProjectedCost] = useState<string>('100');
@@ -37,6 +38,9 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
     const [useTaper, setUseTaper] = useState<boolean>(true);
     const [projectionOpen, setProjectionOpen] = useState<boolean>(true);
     const [showHistory, setShowHistory] = useState<boolean>(false);
+    const [chartMounted, setChartMounted] = useState(false);
+
+    useEffect(() => { setChartMounted(true); }, []);
 
     // Load saved settings when ticker changes
     useEffect(() => {
@@ -312,48 +316,6 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                 <input type="number" min="1" step="1" placeholder="months" value={taperLength} onChange={e => setTaperLength(e.target.value)} className="input" disabled={!useTaper} style={{ opacity: useTaper ? 1 : 0.35 }} />
             </div>
 
-            <div className="h-80 w-100">
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={projectionData}>
-                        <defs>
-                            <linearGradient id="colorProj" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="var(--warning-orange)" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="var(--warning-orange)" stopOpacity={0} />
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis
-                            dataKey="date"
-                            stroke="var(--text-secondary)"
-                            fontSize={10}
-                            tickLine={false}
-                            axisLine={false}
-                            interval={5}
-                        />
-                        <YAxis
-                            stroke="var(--text-secondary)"
-                            fontSize={12}
-                            tickLine={false}
-                            axisLine={false}
-                            tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                        />
-                        <Tooltip
-                            contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', borderRadius: '8px' }}
-                            itemStyle={{ color: 'var(--text-primary)' }}
-                        />
-                        <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke="var(--warning-orange)"
-                            fillOpacity={1}
-                            fill="url(#colorProj)"
-                            strokeWidth={3}
-                            name="Projected Value"
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
-            </div>
-
             <div className="overflow-x-auto max-h-96 overflow-y-auto custom-scrollbar">
                 <table>
                     <thead className="sticky top-0 bg-card-bg z-10">
@@ -445,10 +407,12 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                             <div style={{ width: '24px', height: '0', borderTop: '2px dashed var(--primary-purple)' }} />
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Total Spent</span>
                         </div>
+                        {hasDividends && (
                         <div className="flex items-center gap-2">
                             <div style={{ width: '24px', height: '3px', background: 'var(--primary-blue)', borderRadius: '2px' }} />
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Dividend (right axis)</span>
                         </div>
+                        )}
                         {useTaper && taperDateLabel && (
                             <div className="flex items-center gap-2">
                                 <div style={{ width: '24px', height: '0', borderTop: '2px dashed var(--accent-orange, #f97316)' }} />
@@ -468,7 +432,7 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                             </div>
                         )}
                     </div>
-                    <ResponsiveContainer width="100%" height="100%">
+                    {chartMounted && <ResponsiveContainer width="100%" height={300}>
                         <AreaChart data={chartData}>
                             <defs>
                                 <linearGradient id="colorProjValue" x1="0" y1="0" x2="0" y2="1">
@@ -495,8 +459,9 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
-                                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                                tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
                             />
+                            {hasDividends && (
                             <YAxis
                                 yAxisId="right"
                                 orientation="right"
@@ -506,6 +471,7 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                                 axisLine={false}
                                 tickFormatter={(value) => `$${value.toLocaleString()}`}
                             />
+                            )}
                             <Tooltip
                                 contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', borderRadius: '8px' }}
                                 itemStyle={{ color: 'var(--text-primary)' }}
@@ -535,6 +501,7 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                                 strokeDasharray="5 5"
                                 name="Total Spent"
                             />
+                            {hasDividends && (
                             <Area
                                 yAxisId="right"
                                 type="monotone"
@@ -545,7 +512,8 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                                 strokeWidth={2}
                                 name="Monthly Dividend"
                             />
-                            {milestones.map(m => (
+                            )}
+                            {hasDividends && milestones.map(m => (
                                 <ReferenceLine
                                     key={m.value}
                                     x={m.date}
@@ -611,7 +579,7 @@ const ProjectionView = ({ purchases, ticker }: ProjectionViewProps) => {
                                 />
                             )}
                         </AreaChart>
-                    </ResponsiveContainer>
+                    </ResponsiveContainer>}
                 </div>
             </section>
         </>

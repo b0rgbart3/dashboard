@@ -100,7 +100,7 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                                             {p.type === 'dividend' ? (isCompact ? 'D' : 'Dividend') : (isCompact ? 'P' : 'Purchase')}
                                         </span>
                                     </td>
-                                    <td className="font-medium text-accent-green">${isCompact ? Math.trunc(p.price).toLocaleString() : p.price.toFixed(2)}</td>
+                                    <td className="font-medium text-accent-green">${isCompact ? Math.trunc(p.price).toLocaleString() : p.price.toLocaleString(undefined, numFmt)}</td>
                                     <td>{isCompact ? Math.trunc(p.quantity).toLocaleString() : p.quantity.toLocaleString()}</td>
                                     <td className="font-bold text-white">${isCompact ? Math.trunc(p.price * p.quantity).toLocaleString() : (p.price * p.quantity).toLocaleString(undefined, numFmt)}</td>
                                     <td className="font-bold text-accent-purple">${isCompact ? Math.trunc(totalSpentMap[p.id]).toLocaleString() : totalSpentMap[p.id].toLocaleString(undefined, numFmt)}</td>

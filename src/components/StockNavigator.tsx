@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { Stock } from '../types';
 
 interface StockNavigatorProps {
@@ -7,9 +7,10 @@ interface StockNavigatorProps {
     onPrev: () => void;
     onNext: () => void;
     onAddStock: () => void;
+    onRemoveStock: () => void;
 }
 
-const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onAddStock }: StockNavigatorProps) => {
+const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onAddStock, onRemoveStock }: StockNavigatorProps) => {
     const current = stocks[currentIndex];
     const isFirst = currentIndex === 0;
     const isLast = currentIndex === stocks.length - 1;
@@ -58,6 +59,15 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onAddStock }: St
                 >
                     <Plus size={14} />
                     Add Stock
+                </button>
+
+                <button
+                    onClick={onRemoveStock}
+                    className="btn-delete"
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px' }}
+                >
+                    <Trash2 size={14} />
+                    Remove Stock
                 </button>
             </div>
         </div>

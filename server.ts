@@ -5,6 +5,8 @@ import bodyParser from 'body-parser';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import YahooFinance from 'yahoo-finance2';
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,7 +19,7 @@ const STOCKS_FILE = path.join(__dirname, 'data', 'stocks.json');
 const PROJECTION_SETTINGS_FILE = path.join(__dirname, 'data', 'projection-settings.json');
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '10mb' }));
 
 // Ensure the data directory exists
 const dataDir = path.join(__dirname, 'data');
@@ -141,6 +143,20 @@ app.delete('/api/purchases/:id', (req: Request, res: Response) => {
     });
 });
 
+// DELETE all purchases for a ticker
+app.delete('/api/purchases', (req: Request, res: Response) => {
+    const ticker = req.query.ticker as string | undefined;
+    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading data file');
+        let purchases: Array<{ ticker?: string }> = JSON.parse(data);
+        const remaining = ticker ? purchases.filter(p => p.ticker !== ticker) : [];
+        fs.writeFile(DATA_FILE, JSON.stringify(remaining, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing data file');
+            res.status(200).json({ message: 'Purchases deleted', ticker });
+        });
+    });
+});
+
 // POST bulk purchases (CSV import)
 app.post('/api/purchases/bulk', (req: Request, res: Response) => {
     const newPurchases = req.body;
@@ -202,6 +218,20 @@ app.delete('/api/dividends/:id', (req: Request, res: Response) => {
         fs.writeFile(DIVIDENDS_FILE, JSON.stringify(dividends, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing dividends file');
             res.status(200).json({ message: 'Dividend deleted', id });
+        });
+    });
+});
+
+// DELETE all dividends for a ticker
+app.delete('/api/dividends', (req: Request, res: Response) => {
+    const ticker = req.query.ticker as string | undefined;
+    fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading dividends file');
+        let dividends: Array<{ ticker?: string }> = JSON.parse(data);
+        const remaining = ticker ? dividends.filter(d => d.ticker !== ticker) : [];
+        fs.writeFile(DIVIDENDS_FILE, JSON.stringify(remaining, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing dividends file');
+            res.status(200).json({ message: 'Dividends deleted', ticker });
         });
     });
 });
@@ -289,6 +319,33 @@ app.put('/api/projection-settings/:ticker', (req: Request, res: Response) => {
             res.status(200).json(settings);
         });
     });
+});
+
+// --- Live price proxy (yahoo-finance2) ---
+
+// Maps bare crypto symbols to Yahoo Finance's expected format (e.g. BTC → BTC-USD)
+const YF_CRYPTO_MAP: Record<string, string> = {
+    BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', XRP: 'XRP-USD',
+    DOGE: 'DOGE-USD', ADA: 'ADA-USD', AVAX: 'AVAX-USD', LINK: 'LINK-USD',
+    LTC: 'LTC-USD', DOT: 'DOT-USD', MATIC: 'MATIC-USD',
+};
+
+function toYfTicker(ticker: string): string {
+    return YF_CRYPTO_MAP[ticker.toUpperCase()] ?? ticker;
+}
+
+app.get('/api/price/:ticker', async (req: Request, res: Response) => {
+    const { ticker } = req.params;
+    const yfTicker = toYfTicker(ticker);
+    try {
+        const quote = await yahooFinance.quote(yfTicker);
+        const price = quote?.regularMarketPrice;
+        if (price == null) return res.status(404).json({ error: `Price not found for ${yfTicker}` });
+        res.json({ price });
+    } catch (err: unknown) {
+        console.error('[price]', ticker, err);
+        res.status(502).json({ error: 'Failed to fetch live price' });
+    }
 });
 
 app.listen(PORT, () => {

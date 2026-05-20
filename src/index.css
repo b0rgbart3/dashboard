@@ -28,8 +28,8 @@ body {
   background-color: var(--bg-color);
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-  overflow-x: hidden;
+  height: 100vh;
+  overflow: hidden;
   background-image:
     radial-gradient(circle at 20% 20%, rgba(123, 63, 228, 0.1) 0%, transparent 40%),
     radial-gradient(circle at 80% 80%, rgba(0, 123, 255, 0.1) 0%, transparent 40%);
@@ -47,7 +47,17 @@ h4 {
 .dashboard-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 2rem 2rem 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dashboard-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 2rem;
 }
 
 .glass-card {
@@ -296,10 +306,15 @@ tr:hover td {
   padding: 0;
   margin-bottom: 1.5rem;
   font-family: inherit;
+  text-align: left;
+}
+
+.accordion-header h2 {
+  color: #ffffff;
 }
 
 .accordion-header:hover h2 {
-  color: rgba(255, 255, 255, 0.8);
+  color: #7dd3fc;
 }
 
 .btn-delete {

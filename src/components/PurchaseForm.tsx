@@ -23,9 +23,6 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
 
         if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return parseISO(input);
 
-        const parsed = new Date(input);
-        if (isValid(parsed) && !isNaN(parsed.getTime())) return parsed;
-
         const formats = [
             'MM/dd/yyyy',
             'M/d/yyyy',
@@ -41,13 +38,35 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
         for (const fmt of formats) {
             try {
                 const attempt = parse(input, fmt, new Date());
-                if (isValid(attempt)) return attempt;
+                if (isValid(attempt)) {
+                    const year = attempt.getFullYear();
+                    if (year >= 1900 && year <= new Date().getFullYear()) return attempt;
+                }
             } catch {
                 // Continue to next format
             }
         }
 
         return null;
+    };
+
+    const parseCSVLine = (line: string): string[] => {
+        const cols: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (let j = 0; j < line.length; j++) {
+            const ch = line[j];
+            if ((ch === '"' || ch === "'") && (current === '' || inQuotes)) {
+                inQuotes = !inQuotes;
+            } else if (ch === ',' && !inQuotes) {
+                cols.push(current.trim());
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+        cols.push(current.trim());
+        return cols;
     };
 
     const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,7 +82,7 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
             const errors: string[] = [];
 
             for (let i = 0; i < lines.length; i++) {
-                const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+                const cols = parseCSVLine(lines[i]);
                 if (cols.length < 3) continue;
 
                 const [rawDate, rawQty, rawPrice] = cols;
@@ -188,12 +207,12 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
                 </div>
             </div>
             <div className="input-group">
-                <label>Price per Share ($)</label>
-                <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" required />
-            </div>
-            <div className="input-group">
                 <label>Quantity</label>
                 <input type="number" step="0.1" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" required />
+            </div>
+            <div className="input-group">
+                <label>Price per Share ($)</label>
+                <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" required />
             </div>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>

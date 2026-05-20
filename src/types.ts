@@ -37,4 +37,6 @@ export interface ProjectionSettings {
   targetIncome: string;
   projectionLength: string;
   useTaper: boolean;
+  stackMode: "average" | "ramping";
+  rampUpMonths: string;
 }

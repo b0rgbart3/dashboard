@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { PlusCircle, Calendar, Upload } from 'lucide-react';
-import { parse, isValid, format } from 'date-fns';
+import { parse, parseISO, isValid, format } from 'date-fns';
 import type { Dividend } from '../types';
 
 interface DividendFormProps {
@@ -21,8 +21,7 @@ const DividendForm = ({ onAdd, onImport }: DividendFormProps) => {
     const parseFlexibleDate = (input: string): Date | null => {
         if (!input) return null;
 
-        const parsed = new Date(input);
-        if (isValid(parsed) && !isNaN(parsed.getTime())) return parsed;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return parseISO(input);
 
         const formats = [
             'MM/dd/yyyy',
@@ -186,12 +185,12 @@ const DividendForm = ({ onAdd, onImport }: DividendFormProps) => {
                 </div>
             </div>
             <div className="input-group">
-                <label>Price per Share ($)</label>
-                <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" required />
-            </div>
-            <div className="input-group">
                 <label>Quantity</label>
                 <input type="number" step="0.1" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" required />
+            </div>
+            <div className="input-group">
+                <label>Price per Share ($)</label>
+                <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" required />
             </div>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
