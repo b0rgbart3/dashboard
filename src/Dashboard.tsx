@@ -21,7 +21,11 @@ interface HistoricalDataPoint {
     lastDividendAmount: number; // most recent single dividend payment up to this point
 }
 
-const Dashboard = () => {
+interface DashboardProps {
+    onBack: () => void;
+}
+
+const Dashboard = ({ onBack }: DashboardProps) => {
     const [stocks, setStocks] = useState<Stock[]>([]);
     const [currentStockIndex, setCurrentStockIndex] = useState<number>(0);
     const [showAddStockModal, setShowAddStockModal] = useState<boolean>(false);
@@ -397,6 +401,7 @@ const Dashboard = () => {
                 onNext={goToNext}
                 onAddStock={() => setShowAddStockModal(true)}
                 onRemoveStock={handleRemoveStock}
+                onBack={onBack}
             />
 
             <header className="mb-8 mt-4">
