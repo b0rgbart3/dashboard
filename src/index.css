@@ -139,7 +139,8 @@ select {
   transition: var(--transition-smooth);
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--primary-purple);
   background: rgba(255, 255, 255, 0.08);
@@ -238,6 +239,16 @@ tr:hover td {
 .badge-warning {
   background: rgba(242, 169, 0, 0.15);
   color: var(--warning-orange);
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.badge-secondary {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
 }
 
 /* Recharts Customization */

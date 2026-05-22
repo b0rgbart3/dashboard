@@ -1,18 +1,19 @@
 import { useState, useRef } from 'react';
 import { PlusCircle, Calendar, Upload } from 'lucide-react';
 import { parse, parseISO, isValid, format } from 'date-fns';
-import type { Purchase } from '../types';
+import type { Transaction, EntryType } from '../types';
 
-interface PurchaseFormProps {
-    onAdd: (purchase: Purchase) => void;
-    onImport: (entries: Purchase[]) => void;
+interface TransactionFormProps {
+    onAdd: (t: Omit<Transaction, 'id'>) => void;
+    onImport: (entries: Omit<Transaction, 'id'>[]) => void;
 }
 
-const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
+const TransactionForm = ({ onAdd, onImport }: TransactionFormProps) => {
     const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [dateInput, setDateInput] = useState<string>(new Date().toISOString().split('T')[0]);
     const [price, setPrice] = useState<string>('');
     const [quantity, setQuantity] = useState<string>('');
+    const [type, setType] = useState<EntryType>('purchase');
     const datePickerRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +70,19 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
         return cols;
     };
 
+    const parseTransactionType = (raw: string): EntryType | null => {
+        const val = raw.toLowerCase().trim();
+        if (val === 'purchase' || val === 'p') return 'purchase';
+        if (val === 'dividend' || val === 'd') return 'dividend';
+        if (val === 'buy') return 'BUY';
+        if (val === 'sell') return 'SELL';
+        if (val === 'slip') return 'SLIP';
+        if (val === 'mdiv') return 'MDIV';
+        if (val === 'cdiv') return 'CDIV';
+        if (val === 'split' || val === 'spl') return 'SPLIT';
+        return null;
+    };
+
     const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -78,17 +92,27 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
         reader.onload = (evt) => {
             const text = evt.target?.result as string;
             const lines = text.split(/\r?\n/).filter(l => l.trim());
-            const entries: Purchase[] = [];
+            const entries: Omit<Transaction, 'id'>[] = [];
             const errors: string[] = [];
 
-            for (let i = 0; i < lines.length; i++) {
+            for (let i = 1; i < lines.length; i++) {
                 const cols = parseCSVLine(lines[i]);
-                if (cols.length < 3) continue;
+                if (cols.length < 4) {
+                    errors.push(`Row ${i + 1}: expected 4 columns (Date, Transaction_Type, Quantity, Price)`);
+                    continue;
+                }
 
-                const [rawDate, rawQty, rawPrice] = cols;
+                const [rawDate, rawType, rawQty, rawPrice] = cols;
+
                 const parsed = parseFlexibleDate(rawDate);
                 if (!parsed || !isValid(parsed)) {
-                    if (i > 0) errors.push(`Row ${i + 1}: invalid date "${rawDate}"`);
+                    errors.push(`Row ${i + 1}: invalid date "${rawDate}"`);
+                    continue;
+                }
+
+                const entryType = parseTransactionType(rawType);
+                if (!entryType) {
+                    errors.push(`Row ${i + 1}: unrecognized type "${rawType}" (use purchase, dividend, BUY, SELL, SLIP, MDIV, CDIV, SPLIT)`);
                     continue;
                 }
 
@@ -101,9 +125,10 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
 
                 entries.push({
                     date: format(parsed, 'yyyy-MM-dd'),
+                    type: entryType,
                     quantity: qty,
                     price: entryPrice,
-                    id: Date.now() + i
+                    ticker: '',
                 });
             }
 
@@ -145,15 +170,16 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
         }
 
         if (finalDate > new Date()) {
-            alert('Cannot enter a future date for an actual purchase.');
+            alert('Cannot enter a future date for a transaction.');
             return;
         }
 
         onAdd({
             date: format(finalDate, 'yyyy-MM-dd'),
+            type,
             price: parseFloat(price),
             quantity: parseFloat(quantity),
-            id: Date.now()
+            ticker: '',
         });
         setPrice('');
         setQuantity('');
@@ -162,7 +188,24 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
     return (
         <form onSubmit={handleSubmit} className="purchase-form-grid">
             <div className="input-group">
-                <label>Purchase Date</label>
+                <label>Transaction Type</label>
+                <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as EntryType)}
+                    style={{ width: '100%' }}
+                >
+                    <option value="purchase">Purchase</option>
+                    <option value="dividend">Dividend</option>
+                    <option value="BUY">BUY</option>
+                    <option value="SELL">SELL</option>
+                    <option value="SLIP">SLIP</option>
+                    <option value="MDIV">MDIV</option>
+                    <option value="CDIV">CDIV</option>
+                    <option value="SPLIT">SPLIT (qty = ratio, e.g. 2.0)</option>
+                </select>
+            </div>
+            <div className="input-group">
+                <label>Date</label>
                 <div className="input-with-button">
                     <input
                         type="text"
@@ -240,4 +283,4 @@ const PurchaseForm = ({ onAdd, onImport }: PurchaseFormProps) => {
     );
 };
 
-export default PurchaseForm;
+export default TransactionForm;

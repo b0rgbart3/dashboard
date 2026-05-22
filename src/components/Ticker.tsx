@@ -6,9 +6,11 @@ interface TickerProps {
   price: number;
   isLive?: boolean;
   totalShares?: number;
-  totalValue?: number;
+  marketValue?: number;
   totalInvested?: number;
-  totalDividends?: number;
+  sellProceeds?: number;
+  cashIncome?: number;
+  dividendIncome?: number;
   avgPurchasePrice?: number | null;
   earliestPurchaseDate?: string | null;
   activeInvestmentYears?: number | null;
@@ -22,16 +24,20 @@ const Ticker = ({
   price,
   isLive = false,
   totalShares = 0,
-  totalValue = 0,
+  marketValue = 0,
   totalInvested = 0,
-  totalDividends = 0,
+  sellProceeds = 0,
+  cashIncome = 0,
+  dividendIncome = 0,
   avgPurchasePrice = null,
   earliestPurchaseDate = null,
   activeInvestmentYears = null,
 }: TickerProps) => {
+  const netInvested = totalInvested - sellProceeds;
+  const totalGainDollars = marketValue + cashIncome - netInvested;
   const totalReturn =
     totalInvested > 0
-      ? ((totalValue - totalInvested) / totalInvested) * 100
+      ? (totalGainDollars / totalInvested) * 100
       : null;
 
   const yearsHeld =
@@ -40,8 +46,8 @@ const Ticker = ({
       : null;
 
   const dividendReturnPct =
-    totalInvested > 0 && totalDividends > 0
-      ? (totalDividends / totalInvested) * 100
+    totalInvested > 0 && dividendIncome > 0
+      ? (dividendIncome / totalInvested) * 100
       : null;
 
   const effectiveYears =
@@ -99,13 +105,13 @@ const Ticker = ({
 
       <div style={{ width: "33.333%" }} className="flex items-center justify-center">
         <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4">
-          <div style={LABEL_STYLE}>Total Value</div>
+          <div style={LABEL_STYLE}>Market Value</div>
           <div
             className="font-bold font-outfit text-accent-purple"
             style={{ fontSize: "1.875rem", lineHeight: 1 }}
           >
             $
-            {totalValue.toLocaleString(undefined, {
+            {marketValue.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
@@ -128,9 +134,9 @@ const Ticker = ({
             <>
               <div className="text-sm mt-1 flex gap-1">
                 <span style={LABEL_STYLE}>Total Gain:</span>
-                <span className="font-semibold text-accent-green">
-                  {totalValue - totalInvested >= 0 ? "+" : ""}$
-                  {Math.abs(totalValue - totalInvested).toLocaleString(undefined, {
+                <span className="font-semibold" style={{ color: totalGainDollars >= 0 ? 'var(--success-green)' : 'var(--danger-red, #f87171)' }}>
+                  {totalGainDollars >= 0 ? "+" : "-"}$
+                  {Math.abs(totalGainDollars).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -177,13 +183,13 @@ const Ticker = ({
                       className="font-semibold"
                       style={{
                         color:
-                          (totalValue - totalInvested) >= 0
+                          totalGainDollars >= 0
                             ? "var(--success-green)"
                             : "var(--danger-red, #f87171)",
                       }}
                     >
-                      {(totalValue - totalInvested) >= 0 ? "+" : "-"}$
-                      {Math.abs((totalValue - totalInvested) / effectiveYears).toLocaleString(undefined, {
+                      {totalGainDollars >= 0 ? "+" : "-"}$
+                      {Math.abs(totalGainDollars / effectiveYears).toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -195,13 +201,13 @@ const Ticker = ({
                       className="font-semibold"
                       style={{
                         color:
-                          (totalValue - totalInvested) >= 0
+                          totalGainDollars >= 0
                             ? "var(--success-green)"
                             : "var(--danger-red, #f87171)",
                       }}
                     >
-                      {(totalValue - totalInvested) >= 0 ? "+" : "-"}$
-                      {Math.abs((totalValue - totalInvested) / effectiveYears / 12).toLocaleString(undefined, {
+                      {totalGainDollars >= 0 ? "+" : "-"}$
+                      {Math.abs(totalGainDollars / effectiveYears / 12).toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -214,16 +220,16 @@ const Ticker = ({
         </div>
       </div>
 
-      {totalDividends > 0 && (
+      {cashIncome > 0 && (
         <div style={{ width: "33.333%" }} className="flex items-center justify-end">
           <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4">
-            <div style={LABEL_STYLE}>Total Dividends Earned</div>
+            <div style={LABEL_STYLE}>Cash Income</div>
             <div
               className="font-bold font-outfit text-accent-green"
               style={{ fontSize: "1.875rem", lineHeight: 1 }}
             >
               $
-              {totalDividends.toLocaleString(undefined, {
+              {cashIncome.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}

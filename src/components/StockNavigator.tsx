@@ -6,12 +6,12 @@ interface StockNavigatorProps {
     currentIndex: number;
     onPrev: () => void;
     onNext: () => void;
+    onNavigate: (index: number) => void;
     onAddStock: () => void;
     onRemoveStock: () => void;
-    onBack: () => void;
 }
 
-const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onAddStock, onRemoveStock, onBack }: StockNavigatorProps) => {
+const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAddStock, onRemoveStock }: StockNavigatorProps) => {
     const current = stocks[currentIndex];
     const isFirst = currentIndex === 0;
     const isLast = currentIndex === stocks.length - 1;
@@ -19,15 +19,15 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onAddStock, onRe
     return (
         <div className="glass-card mb-4" style={{ padding: '12px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <button
-                    onClick={onBack}
+                <a
+                    href="/"
                     className="btn btn-secondary"
                     title="Back to home"
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', marginRight: '4px' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', marginRight: '4px', textDecoration: 'none', fontSize: '14px' }}
                 >
                     <ArrowLeft size={16} />
                     Home
-                </button>
+                </a>
                 <button
                     onClick={onPrev}
                     disabled={isFirst}
@@ -38,19 +38,32 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onAddStock, onRe
                 </button>
 
                 <div style={{ flex: 1, textAlign: 'center' }}>
-                    {current && (
-                        <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {current.name}{' '}
-                            <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>
-                                ({current.ticker})
-                            </span>
-                        </span>
-                    )}
-                    {stocks.length > 1 && (
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>
-                            {currentIndex + 1} / {stocks.length}
-                        </span>
-                    )}
+                    <select
+                        value={currentIndex}
+                        onChange={e => onNavigate(Number(e.target.value))}
+                        style={{
+                            fontSize: '15px',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            background: 'var(--card-bg)',
+                            border: '1px solid var(--card-border)',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            cursor: 'pointer',
+                            appearance: 'none',
+                            WebkitAppearance: 'none',
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 8px center',
+                            paddingRight: '28px',
+                        }}
+                    >
+                        {stocks.map((s, i) => (
+                            <option key={s.ticker} value={i} style={{ background: 'var(--card-bg)', color: 'var(--text-primary)' }}>
+                                {s.name === s.ticker ? s.ticker : `${s.name} (${s.ticker})`}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 <button

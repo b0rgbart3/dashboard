@@ -1,4 +1,4 @@
-# STRC Dashboard
+# Moon-Math Dashboard
 
 A stock tracking dashboard for monitoring purchases, dividends, and projecting future portfolio value.
 

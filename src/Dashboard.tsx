@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Ticker from './components/Ticker';
-import PurchaseForm from './components/PurchaseForm';
-import DividendForm from './components/DividendForm';
+import TransactionForm from './components/TransactionForm';
 import HistoryTable from './components/HistoryTable';
 import ProjectionView from './components/ProjectionView';
 import StockNavigator from './components/StockNavigator';
 import AddStockModal from './components/AddStockModal';
-import { Plus, History, BarChart3, ChevronDown, ChevronUp, DollarSign, Trash2 } from 'lucide-react';
+import { Plus, History, BarChart3, ChevronDown, ChevronUp, Trash2, SlidersHorizontal } from 'lucide-react';
 import { AreaChart, Area, Bar, ComposedChart, Line, Cell, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format, parse, startOfMonth } from 'date-fns';
-import type { Purchase, Dividend, CombinedEntry, Stock } from './types';
+import type { Transaction, Stock, StockSummary } from './types';
 
 interface HistoricalDataPoint {
     timestamp: number;    // Unix ms — numeric XAxis dataKey
@@ -22,16 +21,39 @@ interface HistoricalDataPoint {
 }
 
 interface DashboardProps {
-    onBack: () => void;
+    onBack: (message?: string) => void;
 }
 
 const Dashboard = ({ onBack }: DashboardProps) => {
     const [stocks, setStocks] = useState<Stock[]>([]);
+    const [stocksLoaded, setStocksLoaded] = useState(false);
     const [currentStockIndex, setCurrentStockIndex] = useState<number>(0);
+    const [stockSummaries, setStockSummaries] = useState<Record<string, StockSummary>>({});
+    const [summariesLoaded, setSummariesLoaded] = useState(false);
+    const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active');
+    const [filterMinValue, setFilterMinValue] = useState<number>(1000);
+    const [filterDividends, setFilterDividends] = useState<'all' | 'yes' | 'no'>('all');
     const [showAddStockModal, setShowAddStockModal] = useState<boolean>(false);
-    const [purchases, setPurchases] = useState<Purchase[]>([]);
-    const [dividends, setDividends] = useState<Dividend[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [livePrice, setLivePrice] = useState<number | null>(null);
+
+    const purchases = transactions.filter(t => t.type === 'purchase' || t.type === 'BUY');
+    const sells = transactions.filter(t => t.type === 'SELL');
+    const cashIncome = transactions.filter(t => t.type === 'dividend' || t.type === 'MDIV' || t.type === 'CDIV' || t.type === 'SLIP');
+    const dividendTransactions = transactions.filter(t => t.type === 'dividend' || t.type === 'MDIV' || t.type === 'CDIV');
+
+    const totalShares = useMemo(() => {
+        const sorted = [...transactions].sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        let qty = 0;
+        for (const t of sorted) {
+            if (t.type === 'BUY' || t.type === 'purchase') qty += t.quantity;
+            else if (t.type === 'SELL') qty -= t.quantity;
+            else if (t.type === 'SPLIT') qty *= t.quantity;
+        }
+        return qty;
+    }, [transactions]);
     const lastPurchasePrice = purchases.length > 0 ? purchases[purchases.length - 1].price : 0;
     const currentPrice = livePrice ?? lastPurchasePrice;
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -47,7 +69,12 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         fetch('http://localhost:5001/api/stocks')
             .then(res => res.json())
             .then((data: Stock[]) => {
+                if (data.length === 0) {
+                    onBack('No ticker data found. Please import data first.');
+                    return;
+                }
                 setStocks(data);
+                setStocksLoaded(true);
                 const hash = window.location.hash.slice(1).toUpperCase();
                 if (hash) {
                     const idx = data.findIndex((s: Stock) => s.ticker.toUpperCase() === hash);
@@ -58,6 +85,16 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     }, []);
 
     useEffect(() => {
+        fetch('http://localhost:5001/api/stocks/summary')
+            .then(res => res.json())
+            .then((data: Record<string, StockSummary>) => {
+                setStockSummaries(data);
+                setSummariesLoaded(true);
+            })
+            .catch(err => console.error('Error fetching stock summaries:', err));
+    }, []);
+
+    useEffect(() => {
         if (currentTicker) {
             window.location.hash = currentTicker;
         }
@@ -65,20 +102,11 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
     useEffect(() => {
         if (!currentTicker) return;
-        setPurchases([]);
-        fetch(`http://localhost:5001/api/purchases?ticker=${currentTicker}`)
+        setTransactions([]);
+        fetch(`http://localhost:5001/api/transactions?ticker=${currentTicker}`)
             .then(res => res.json())
-            .then((data: Purchase[]) => setPurchases(data))
-            .catch(err => console.error('Error fetching purchases:', err));
-    }, [currentTicker]);
-
-    useEffect(() => {
-        if (!currentTicker) return;
-        setDividends([]);
-        fetch(`http://localhost:5001/api/dividends?ticker=${currentTicker}`)
-            .then(res => res.json())
-            .then((data: Dividend[]) => setDividends(data))
-            .catch(err => console.error('Error fetching dividends:', err));
+            .then((data: Transaction[]) => setTransactions(data))
+            .catch(err => console.error('Error fetching transactions:', err));
     }, [currentTicker]);
 
     useEffect(() => {
@@ -90,106 +118,54 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             .catch(err => console.warn(`Live price unavailable for ${currentTicker}:`, err));
     }, [currentTicker]);
 
-    const addPurchase = async (purchase: Purchase): Promise<void> => {
+    const addTransaction = async (t: Omit<Transaction, 'id'>): Promise<void> => {
         try {
-            const res = await fetch('http://localhost:5001/api/purchases', {
+            const res = await fetch('http://localhost:5001/api/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...purchase, ticker: currentTicker })
+                body: JSON.stringify({ ...t, ticker: currentTicker, id: Date.now() })
             });
             if (res.ok) {
-                const savedPurchase: Purchase = await res.json();
-                setPurchases(prev => {
-                    const updated = [...prev, savedPurchase];
-                    return updated.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                });
+                const saved: Transaction = await res.json();
+                setTransactions(prev => [...prev, saved].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
             }
         } catch (err) {
-            console.error('Error saving purchase:', err);
+            console.error('Error saving transaction:', err);
         }
     };
 
-    const importPurchases = async (entries: Purchase[]): Promise<void> => {
+    const importTransactions = async (entries: Omit<Transaction, 'id'>[]): Promise<void> => {
         try {
-            const tagged = entries.map(e => ({ ...e, ticker: currentTicker }));
-            const res = await fetch('http://localhost:5001/api/purchases/bulk', {
+            const tagged = entries.map((e, i) => ({ ...e, ticker: currentTicker, id: Date.now() + i }));
+            const res = await fetch('http://localhost:5001/api/transactions/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(tagged)
             });
             if (res.ok) {
-                const saved: Purchase[] = await res.json();
-                setPurchases(prev => {
-                    const updated = [...prev, ...saved];
-                    return updated.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                });
+                const saved: Transaction[] = await res.json();
+                setTransactions(prev => [...prev, ...saved].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
             }
         } catch (err) {
-            console.error('Error importing purchases:', err);
+            console.error('Error importing transactions:', err);
         }
     };
 
-    const addDividend = async (dividend: Dividend): Promise<void> => {
+    const deleteAllTransactions = async (): Promise<void> => {
+        if (!confirm(`Delete all transaction history for ${currentTicker}? This cannot be undone.`)) return;
         try {
-            const res = await fetch('http://localhost:5001/api/dividends', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...dividend, ticker: currentTicker })
-            });
-            if (res.ok) {
-                const savedDividend: Dividend = await res.json();
-                setDividends(prev => {
-                    const updated = [...prev, savedDividend];
-                    return updated.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                });
-            }
+            const res = await fetch(`http://localhost:5001/api/transactions?ticker=${currentTicker}`, { method: 'DELETE' });
+            if (res.ok) setTransactions([]);
         } catch (err) {
-            console.error('Error saving dividend:', err);
+            console.error('Error deleting all transactions:', err);
         }
     };
 
-    const importDividends = async (entries: Dividend[]): Promise<void> => {
+    const deleteEntry = async (id: number): Promise<void> => {
         try {
-            const tagged = entries.map(e => ({ ...e, ticker: currentTicker }));
-            const res = await fetch('http://localhost:5001/api/dividends/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(tagged)
-            });
+            const res = await fetch(`http://localhost:5001/api/transactions/${id}`, { method: 'DELETE' });
             if (res.ok) {
-                const saved: Dividend[] = await res.json();
-                setDividends(prev => {
-                    const updated = [...prev, ...saved];
-                    return updated.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                });
-            }
-        } catch (err) {
-            console.error('Error importing dividends:', err);
-        }
-    };
-
-    const deleteAllPurchases = async (): Promise<void> => {
-        if (!confirm(`Delete all purchase history for ${currentTicker}? This cannot be undone.`)) return;
-        try {
-            const res = await fetch(`http://localhost:5001/api/purchases?ticker=${currentTicker}`, { method: 'DELETE' });
-            if (res.ok) setPurchases([]);
-        } catch (err) {
-            console.error('Error deleting all purchases:', err);
-        }
-    };
-
-    const deleteEntry = async (id: number, type: string): Promise<void> => {
-        const endpoint = type === 'dividend'
-            ? `http://localhost:5001/api/dividends/${id}`
-            : `http://localhost:5001/api/purchases/${id}`;
-        try {
-            const res = await fetch(endpoint, { method: 'DELETE' });
-            if (res.ok) {
-                if (type === 'dividend') {
-                    setDividends(prev => prev.filter(d => d.id !== id));
-                } else {
-                    setPurchases(prev => prev.filter(p => p.id !== id));
-                }
+                setTransactions(prev => prev.filter(t => t.id !== id));
             }
         } catch (err) {
             console.error('Error deleting entry:', err);
@@ -229,10 +205,6 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         if (!currentStock) return;
         if (!confirm(`Permanently delete ${currentStock.name} (${currentTicker}) and all its data? This cannot be undone.`)) return;
         try {
-            await Promise.all([
-                fetch(`http://localhost:5001/api/purchases?ticker=${currentTicker}`, { method: 'DELETE' }),
-                fetch(`http://localhost:5001/api/dividends?ticker=${currentTicker}`, { method: 'DELETE' }),
-            ]);
             const res = await fetch(`http://localhost:5001/api/stocks/${currentTicker}`, { method: 'DELETE' });
             if (res.ok) {
                 setStocks(prev => {
@@ -240,42 +212,84 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                     setCurrentStockIndex(i => Math.max(0, Math.min(i, updated.length - 1)));
                     return updated;
                 });
-                setPurchases([]);
-                setDividends([]);
+                setTransactions([]);
             }
         } catch (err) {
             console.error('Error removing stock:', err);
         }
     };
 
-    const goToPrev = () => setCurrentStockIndex(i => Math.max(0, i - 1));
-    const goToNext = () => setCurrentStockIndex(i => Math.min(stocks.length - 1, i + 1));
+    const filteredStocks = useMemo(() => {
+        if (!summariesLoaded) return stocks;
+        return stocks.filter(s => {
+            const summary = stockSummaries[s.ticker];
+            if (filterStatus === 'active' && (!summary || summary.totalShares <= 0)) return false;
+            if (filterStatus === 'inactive' && summary && summary.totalShares > 0) return false;
+            if (filterMinValue > 0 && (summary?.marketValue ?? 0) < filterMinValue) return false;
+            if (filterDividends === 'yes' && !summary?.hasDividends) return false;
+            if (filterDividends === 'no' && summary?.hasDividends) return false;
+            return true;
+        }).sort((a, b) => a.ticker.localeCompare(b.ticker));
+    }, [stocks, stockSummaries, summariesLoaded, filterStatus, filterMinValue, filterDividends]);
+
+    const filteredIndex = filteredStocks.findIndex(s => s.ticker === currentTicker);
+
+    // If active filters push current stock out of view, jump to first visible stock
+    useEffect(() => {
+        if (filteredStocks.length === 0) return;
+        const ticker = stocks[currentStockIndex]?.ticker;
+        if (!filteredStocks.some(s => s.ticker === ticker)) {
+            setCurrentStockIndex(stocks.findIndex(s => s.ticker === filteredStocks[0].ticker));
+        }
+    }, [filteredStocks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const goToPrev = () => {
+        const idx = Math.max(0, filteredIndex - 1);
+        const stock = filteredStocks[idx];
+        if (stock) setCurrentStockIndex(stocks.findIndex(s => s.ticker === stock.ticker));
+    };
+    const goToNext = () => {
+        const idx = Math.min(filteredStocks.length - 1, filteredIndex + 1);
+        const stock = filteredStocks[idx];
+        if (stock) setCurrentStockIndex(stocks.findIndex(s => s.ticker === stock.ticker));
+    };
+    const handleNavigate = (filteredIdx: number) => {
+        const stock = filteredStocks[filteredIdx];
+        if (stock) setCurrentStockIndex(stocks.findIndex(s => s.ticker === stock.ticker));
+    };
 
     const getHistoricalData = (): HistoricalDataPoint[] => {
-        const dayMap = new Map<string, { qty: number; cost: number; lastPrice: number; dividendCost: number }>();
+        const dayMap = new Map<string, { qty: number; cost: number; lastPrice: number; dividendCost: number; splitRatio?: number }>();
 
-        const sorted = [...purchases, ...dividends.map(d => ({ ...d, type: 'dividend' as const }))].sort(
+        const sorted = [...transactions].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
         );
 
-        for (const p of sorted) {
-            const dayKey = p.date;
+        for (const t of sorted) {
+            const dayKey = t.date;
             const existing = dayMap.get(dayKey);
-            const isDividend = 'type' in p && p.type === 'dividend';
+            const isBuy = t.type === 'BUY' || t.type === 'purchase';
+            const isSell = t.type === 'SELL';
+            const isCashIncome = t.type === 'dividend' || t.type === 'MDIV' || t.type === 'CDIV' || t.type === 'SLIP';
+            const isSplit = t.type === 'SPLIT';
+            const qtyDelta = isBuy ? t.quantity : isSell ? -t.quantity : 0;
             if (existing) {
-                existing.qty += p.quantity;
-                if (isDividend) {
-                    existing.dividendCost += p.price * p.quantity;
-                } else {
-                    existing.cost += p.price * p.quantity;
-                    existing.lastPrice = p.price;
+                existing.qty += qtyDelta;
+                if (isCashIncome) {
+                    existing.dividendCost += t.price * t.quantity;
+                } else if (isBuy) {
+                    existing.cost += t.price * t.quantity;
+                    existing.lastPrice = t.price;
+                } else if (isSplit) {
+                    existing.splitRatio = (existing.splitRatio ?? 1) * t.quantity;
                 }
             } else {
                 dayMap.set(dayKey, {
-                    qty: p.quantity,
-                    cost: isDividend ? 0 : p.price * p.quantity,
-                    lastPrice: isDividend ? 0 : p.price,
-                    dividendCost: isDividend ? p.price * p.quantity : 0,
+                    qty: qtyDelta,
+                    cost: isBuy ? t.price * t.quantity : 0,
+                    lastPrice: isBuy ? t.price : 0,
+                    dividendCost: isCashIncome ? t.price * t.quantity : 0,
+                    splitRatio: isSplit ? t.quantity : undefined,
                 });
             }
         }
@@ -294,6 +308,11 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             runningQty += data.qty;
             runningCost += data.cost;
             runningDividendValue += data.dividendCost;
+            // Apply split: multiply shares, divide price so value stays flat
+            if (data.splitRatio) {
+                runningQty *= data.splitRatio;
+                if (lastKnownPrice > 0) lastKnownPrice /= data.splitRatio;
+            }
             if (data.lastPrice > 0) lastKnownPrice = data.lastPrice;
             if (data.dividendCost > 0) lastDividendAmount = +data.dividendCost.toFixed(2);
             const parsedDate = parse(dayKey, 'yyyy-MM-dd', new Date());
@@ -341,10 +360,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
     };
 
-    const combinedEntries: CombinedEntry[] = [
-        ...purchases.map(p => ({ ...p, type: 'purchase' as const })),
-        ...dividends.map(d => ({ ...d, type: 'dividend' as const }))
-    ].sort((a, b) => {
+    const combinedEntries: Transaction[] = [...transactions].sort((a, b) => {
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
         const diff = dateB.getTime() - dateA.getTime();
@@ -354,11 +370,22 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
     const historicalData = getHistoricalData();
     const { data: annualGrowthData, useMonths: growthUseMonths } = getAnnualGrowthData();
+
+    const splitMarkers = transactions
+        .filter(t => t.type === 'SPLIT')
+        .map(t => ({
+            timestamp: parse(t.date, 'yyyy-MM-dd', new Date()).getTime(),
+            ratio: t.quantity,
+            label: t.quantity >= 1
+                ? `${+t.quantity.toFixed(4).replace(/\.?0+$/, '')}:1 Split`
+                : `1:${+((1 / t.quantity).toFixed(4)).replace(/\.?0+$/, '')} Rev`,
+        }));
     const avgGrowthPct = annualGrowthData.length > 0
         ? +(annualGrowthData.reduce((sum, d) => sum + d.gainPct, 0) / annualGrowthData.length).toFixed(2)
         : null;
 
     const maxDividendValue = Math.max(0, ...historicalData.map(d => d.dividendValue));
+    const hasDividendData = maxDividendValue > 0;
     const dividendAxisMax = (() => {
         if (maxDividendValue <= 0) return 10;
         const magnitude = Math.pow(10, Math.floor(Math.log10(maxDividendValue)));
@@ -384,7 +411,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         return ticks;
     })();
 
-    if (stocks.length === 0) {
+    if (!stocksLoaded) {
         return (
             <div className="dashboard-container flex items-center justify-center" style={{ minHeight: '60vh' }}>
                 <div className="text-text-secondary italic">Loading...</div>
@@ -395,14 +422,98 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     return (
         <div className="dashboard-container">
             <StockNavigator
-                stocks={stocks}
-                currentIndex={currentStockIndex}
+                stocks={filteredStocks}
+                currentIndex={Math.max(0, filteredIndex)}
                 onPrev={goToPrev}
                 onNext={goToNext}
+                onNavigate={handleNavigate}
                 onAddStock={() => setShowAddStockModal(true)}
                 onRemoveStock={handleRemoveStock}
-                onBack={onBack}
             />
+
+            {/* Filter bar */}
+            <div className="glass-card" style={{ padding: '10px 16px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <SlidersHorizontal size={14} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Status:</span>
+                        {(['all', 'active', 'inactive'] as const).map(s => (
+                            <button
+                                key={s}
+                                onClick={() => setFilterStatus(s)}
+                                style={{
+                                    padding: '3px 10px',
+                                    fontSize: '12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid',
+                                    cursor: 'pointer',
+                                    borderColor: filterStatus === s ? 'var(--primary-purple)' : 'var(--card-border)',
+                                    background: filterStatus === s ? 'rgba(123,63,228,0.2)' : 'transparent',
+                                    color: filterStatus === s ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                {s === 'active' ? 'Active' : s === 'inactive' ? 'Inactive' : 'All'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Min Value:</span>
+                        <select
+                            value={filterMinValue}
+                            onChange={e => setFilterMinValue(Number(e.target.value))}
+                            style={{
+                                fontSize: '12px',
+                                color: filterMinValue > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                background: 'var(--card-bg)',
+                                border: `1px solid ${filterMinValue > 0 ? 'var(--primary-purple)' : 'var(--card-border)'}`,
+                                borderRadius: '6px',
+                                padding: '3px 22px 3px 8px',
+                                cursor: 'pointer',
+                                appearance: 'none',
+                                WebkitAppearance: 'none',
+                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'right 6px center',
+                            }}
+                        >
+                            <option value={0}>Any</option>
+                            <option value={500}>$500+</option>
+                            <option value={1000}>$1,000+</option>
+                            <option value={5000}>$5,000+</option>
+                            <option value={10000}>$10,000+</option>
+                        </select>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Dividends:</span>
+                        {(['all', 'yes', 'no'] as const).map(d => (
+                            <button
+                                key={d}
+                                onClick={() => setFilterDividends(d)}
+                                style={{
+                                    padding: '3px 10px',
+                                    fontSize: '12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid',
+                                    cursor: 'pointer',
+                                    borderColor: filterDividends === d ? 'var(--primary-blue)' : 'var(--card-border)',
+                                    background: filterDividends === d ? 'rgba(0,123,255,0.15)' : 'transparent',
+                                    color: filterDividends === d ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                {d === 'yes' ? 'With' : d === 'no' ? 'Without' : 'All'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div style={{ marginLeft: 'auto', fontSize: '12px', color: summariesLoaded && (filterStatus !== 'all' || filterMinValue > 0 || filterDividends !== 'all') ? 'var(--warning-orange)' : 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {filteredStocks.length} / {stocks.length} stocks
+                    </div>
+                </div>
+            </div>
 
             <header className="mb-8 mt-4">
                 <Ticker
@@ -410,11 +521,13 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                     name={currentStock?.name}
                     price={currentPrice}
                     isLive={livePrice !== null}
-                    totalShares={[...purchases, ...dividends].reduce((sum, p) => sum + p.quantity, 0)}
-                    totalValue={[...purchases, ...dividends].reduce((sum, p) => sum + p.quantity, 0) * currentPrice}
+                    totalShares={totalShares}
+                    marketValue={totalShares * currentPrice}
                     totalInvested={purchases.reduce((sum, p) => sum + p.quantity * p.price, 0)}
-                    totalDividends={dividends.reduce((sum, d) => sum + d.quantity * d.price, 0)}
-                    avgPurchasePrice={purchases.length > 0 ? purchases.reduce((sum, p) => sum + p.price, 0) / purchases.length : null}
+                    sellProceeds={sells.reduce((sum, s) => sum + s.quantity * s.price, 0)}
+                    cashIncome={cashIncome.reduce((sum, t) => sum + t.quantity * t.price, 0)}
+                    dividendIncome={dividendTransactions.reduce((sum, t) => sum + t.quantity * t.price, 0)}
+                    avgPurchasePrice={totalShares > 0 ? purchases.reduce((sum, p) => sum + p.quantity * p.price, 0) / totalShares : null}
                     earliestPurchaseDate={purchases.length > 0 ? purchases.reduce((earliest, p) => p.date < earliest ? p.date : earliest, purchases[0].date) : null}
                     activeInvestmentYears={purchases.length > 0 ? new Set(purchases.map(p => new Date(p.date).getFullYear())).size : null}
                 />
@@ -432,17 +545,9 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                 <section className="glass-card">
                     <div className="flex items-center gap-2 mb-6">
                         <Plus className="text-accent-purple" size={24} />
-                        <h2>Add Purchase</h2>
+                        <h2>Transactions</h2>
                     </div>
-                    <PurchaseForm onAdd={addPurchase} onImport={importPurchases} />
-                </section>
-
-                <section className="glass-card">
-                    <div className="flex items-center gap-2 mb-6">
-                        <DollarSign className="text-accent-green" size={24} />
-                        <h2>Add Dividend</h2>
-                    </div>
-                    <DividendForm onAdd={addDividend} onImport={importDividends} />
+                    <TransactionForm onAdd={addTransaction} onImport={importTransactions} />
                 </section>
 
                 <section className="glass-card">
@@ -454,15 +559,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                         >
                             <div className="flex items-center gap-2">
                                 <History className="text-accent-blue" size={24} />
-                                <h2>Purchase History</h2>
+                                <h2>Transaction History</h2>
                             </div>
                         </button>
                         <div className="flex items-center gap-2">
-                            {purchases.length > 0 && (
+                            {transactions.length > 0 && (
                                 <button
-                                    onClick={deleteAllPurchases}
+                                    onClick={deleteAllTransactions}
                                     className="btn-delete"
-                                    title="Clear all purchases"
+                                    title="Clear all transactions"
                                     style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', fontSize: '0.75rem' }}
                                 >
                                     <Trash2 size={14} />
@@ -500,7 +605,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                                 <div style={{ width: '24px', height: '3px', background: 'var(--primary-purple)', borderRadius: '2px' }} />
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Total Spent</span>
                             </div>
-                            {dividends.length > 0 && (
+                            {hasDividendData && (
                                 <>
                                     <div className="flex items-center gap-2">
                                         <div style={{ width: '24px', height: '3px', background: 'var(--success-green)', borderRadius: '2px' }} />
@@ -549,7 +654,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                                         axisLine={false}
                                         tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
                                     />
-                                    {dividends.length > 0 && (
+                                    {hasDividendData && (
                                         <YAxis
                                             yAxisId="right"
                                             orientation="right"
@@ -573,10 +678,10 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                                                 'Dividends Received': 'var(--success-green)',
                                                 'Last Dividend': '#f59e0b',
                                             };
-                                            const order = dividends.length > 0
+                                            const order = hasDividendData
                                                 ? ['Current Value', 'Total Spent', 'Dividends Received', 'Last Dividend']
                                                 : ['Current Value', 'Total Spent'];
-                                            const filteredPayload = dividends.length > 0
+                                            const filteredPayload = hasDividendData
                                                 ? payload
                                                 : payload.filter(e => e.name !== 'Dividends Received' && e.name !== 'Last Dividend');
                                             return (
@@ -617,7 +722,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                                         strokeDasharray="5 5"
                                         name="Current Value"
                                     />
-                                    {dividends.length > 0 && (
+                                    {hasDividendData && (
                                         <>
                                             <Area
                                                 yAxisId="right"
@@ -640,6 +745,16 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                                             />
                                         </>
                                     )}
+                                    {splitMarkers.map(marker => (
+                                        <ReferenceLine
+                                            key={marker.timestamp}
+                                            yAxisId="left"
+                                            x={marker.timestamp}
+                                            stroke="#a78bfa"
+                                            strokeDasharray="4 4"
+                                            label={{ value: marker.label, position: 'insideTopRight', fontSize: 10, fill: '#a78bfa' }}
+                                        />
+                                    ))}
                                 </AreaChart>
                             </ResponsiveContainer>
                         ) : null}
@@ -767,7 +882,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                     </div>
                 </section>
 
-                <ProjectionView purchases={purchases} currentPrice={currentPrice} ticker={currentTicker} hasDividends={dividends.length > 0} />
+                <ProjectionView purchases={purchases} currentPrice={currentPrice} ticker={currentTicker} hasDividends={cashIncome.length > 0} />
             </main>
             </div>
         </div>

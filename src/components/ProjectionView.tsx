@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { BarChart3, PieChart, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, addMonths, startOfMonth } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import type { Purchase } from '../types';
-
-import type { ProjectionSettings } from '../types';
+import type { Transaction, ProjectionSettings } from '../types';
 
 interface ProjectionViewProps {
-    purchases: Purchase[];
+    purchases: Transaction[];
     currentPrice: number;
     ticker: string;
     hasDividends: boolean;

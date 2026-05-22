@@ -13,8 +13,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 5001;
-const DATA_FILE = path.join(__dirname, 'data', 'purchases.json');
-const DIVIDENDS_FILE = path.join(__dirname, 'data', 'dividends.json');
+const TRANSACTIONS_FILE = path.join(__dirname, 'data', 'transactions.json');
 const STOCKS_FILE = path.join(__dirname, 'data', 'stocks.json');
 const PROJECTION_SETTINGS_FILE = path.join(__dirname, 'data', 'projection-settings.json');
 
@@ -27,31 +26,10 @@ if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir);
 }
 
-// Ensure the data file exists
-if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+// Ensure the transactions file exists
+if (!fs.existsSync(TRANSACTIONS_FILE)) {
+    fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify([]));
 }
-
-// Ensure the dividends file exists
-if (!fs.existsSync(DIVIDENDS_FILE)) {
-    fs.writeFileSync(DIVIDENDS_FILE, JSON.stringify([]));
-}
-
-// Migration: backfill ticker="STRC" on all legacy records missing the field
-function migrateTickerField(filePath: string): void {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const records: Array<Record<string, unknown>> = JSON.parse(raw);
-    let dirty = false;
-    for (const r of records) {
-        if (!r.ticker) {
-            r.ticker = 'STRC';
-            dirty = true;
-        }
-    }
-    if (dirty) fs.writeFileSync(filePath, JSON.stringify(records, null, 2));
-}
-migrateTickerField(DATA_FILE);
-migrateTickerField(DIVIDENDS_FILE);
 
 // Seed stocks.json if it doesn't exist
 if (!fs.existsSync(STOCKS_FILE)) {
@@ -65,190 +43,78 @@ if (!fs.existsSync(PROJECTION_SETTINGS_FILE)) {
     fs.writeFileSync(PROJECTION_SETTINGS_FILE, JSON.stringify({}));
 }
 
-// GET purchases (optional ?ticker= filter)
-app.get('/api/purchases', (req: Request, res: Response) => {
+// GET transactions (optional ?ticker= filter)
+app.get('/api/transactions', (req: Request, res: Response) => {
     const ticker = req.query.ticker as string | undefined;
-    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).send('Error reading data file');
-        }
-        let purchases = JSON.parse(data);
+    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading transactions file');
+        let transactions = JSON.parse(data);
         if (ticker) {
-            purchases = purchases.filter((p: { ticker?: string }) => p.ticker === ticker);
+            transactions = transactions.filter((t: { ticker?: string }) => t.ticker === ticker);
         }
-        res.json(purchases);
+        res.json(transactions);
     });
 });
 
-// POST purchase
-app.post('/api/purchases', (req: Request, res: Response) => {
-    const newPurchase = req.body;
-
-    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).send('Error reading data file');
-        }
-
-        const purchases = JSON.parse(data);
-        purchases.push(newPurchase);
-
-        fs.writeFile(DATA_FILE, JSON.stringify(purchases, null, 2), (writeErr) => {
-            if (writeErr) {
-                console.error(writeErr);
-                return res.status(500).send('Error writing data file');
-            }
-            res.status(201).json(newPurchase);
+// POST transaction
+app.post('/api/transactions', (req: Request, res: Response) => {
+    const newTransaction = req.body;
+    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading transactions file');
+        const transactions = JSON.parse(data);
+        transactions.push(newTransaction);
+        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing transactions file');
+            res.status(201).json(newTransaction);
         });
     });
 });
 
-// DELETE purchase
-app.delete('/api/purchases/:id', (req: Request, res: Response) => {
-    const id = req.params.id;
-    console.log(`[DELETE] Received request for ID: ${id}`);
-
-    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-        if (err) {
-            console.error('Error reading data file:', err);
-            return res.status(500).send('Error reading data file');
-        }
-
-        let purchases: Array<{ id: string | number }> = [];
-        try {
-            purchases = JSON.parse(data);
-            console.log(`[DELETE] Current file has ${purchases.length} entries. IDs: ${purchases.map(p => p.id).join(', ')}`);
-        } catch (e) {
-            console.error('JSON Parse Error:', e);
-            return res.status(500).send('Corrupt data file');
-        }
-
-        const originalLength = purchases.length;
-        purchases = purchases.filter(p => String(p.id) !== String(id));
-
-        if (purchases.length === originalLength) {
-            console.error(`[DELETE] ID ${id} not found in the list.`);
-            return res.status(404).json({ error: 'Purchase not found', id, existingIds: purchases.map(p => p.id) });
-        }
-
-        fs.writeFile(DATA_FILE, JSON.stringify(purchases, null, 2), (writeErr) => {
-            if (writeErr) {
-                console.error('Error writing data file:', writeErr);
-                return res.status(500).send('Error writing data file');
-            }
-            console.log(`[DELETE] Successfully removed ID: ${id}`);
-            res.status(200).json({ message: 'Purchase deleted', id });
-        });
-    });
-});
-
-// DELETE all purchases for a ticker
-app.delete('/api/purchases', (req: Request, res: Response) => {
-    const ticker = req.query.ticker as string | undefined;
-    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading data file');
-        let purchases: Array<{ ticker?: string }> = JSON.parse(data);
-        const remaining = ticker ? purchases.filter(p => p.ticker !== ticker) : [];
-        fs.writeFile(DATA_FILE, JSON.stringify(remaining, null, 2), (writeErr) => {
-            if (writeErr) return res.status(500).send('Error writing data file');
-            res.status(200).json({ message: 'Purchases deleted', ticker });
-        });
-    });
-});
-
-// POST bulk purchases (CSV import)
-app.post('/api/purchases/bulk', (req: Request, res: Response) => {
-    const newPurchases = req.body;
-    if (!Array.isArray(newPurchases)) {
+// POST bulk transactions (CSV import)
+app.post('/api/transactions/bulk', (req: Request, res: Response) => {
+    const newTransactions = req.body;
+    if (!Array.isArray(newTransactions)) {
         return res.status(400).json({ error: 'Expected an array' });
     }
-
-    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading data file');
-
-        const purchases = JSON.parse(data);
-        const updated = [...purchases, ...newPurchases];
-
-        fs.writeFile(DATA_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
-            if (writeErr) return res.status(500).send('Error writing data file');
-            res.status(201).json(newPurchases);
+    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading transactions file');
+        const transactions = JSON.parse(data);
+        const updated = [...transactions, ...newTransactions];
+        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing transactions file');
+            res.status(201).json(newTransactions);
         });
     });
 });
 
-// GET dividends (optional ?ticker= filter)
-app.get('/api/dividends', (req: Request, res: Response) => {
-    const ticker = req.query.ticker as string | undefined;
-    fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading dividends file');
-        let dividends = JSON.parse(data);
-        if (ticker) {
-            dividends = dividends.filter((d: { ticker?: string }) => d.ticker === ticker);
-        }
-        res.json(dividends);
-    });
-});
-
-// POST dividend
-app.post('/api/dividends', (req: Request, res: Response) => {
-    const newDividend = req.body;
-    fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading dividends file');
-        const dividends = JSON.parse(data);
-        dividends.push(newDividend);
-        fs.writeFile(DIVIDENDS_FILE, JSON.stringify(dividends, null, 2), (writeErr) => {
-            if (writeErr) return res.status(500).send('Error writing dividends file');
-            res.status(201).json(newDividend);
-        });
-    });
-});
-
-// DELETE dividend
-app.delete('/api/dividends/:id', (req: Request, res: Response) => {
+// DELETE transaction by id
+app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     const id = req.params.id;
-    fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading dividends file');
-        let dividends: Array<{ id: string | number }> = JSON.parse(data);
-        const originalLength = dividends.length;
-        dividends = dividends.filter(d => String(d.id) !== String(id));
-        if (dividends.length === originalLength) {
-            return res.status(404).json({ error: 'Dividend not found' });
+    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading transactions file');
+        let transactions: Array<{ id: string | number }> = JSON.parse(data);
+        const originalLength = transactions.length;
+        transactions = transactions.filter(t => String(t.id) !== String(id));
+        if (transactions.length === originalLength) {
+            return res.status(404).json({ error: 'Transaction not found', id });
         }
-        fs.writeFile(DIVIDENDS_FILE, JSON.stringify(dividends, null, 2), (writeErr) => {
-            if (writeErr) return res.status(500).send('Error writing dividends file');
-            res.status(200).json({ message: 'Dividend deleted', id });
+        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing transactions file');
+            res.status(200).json({ message: 'Transaction deleted', id });
         });
     });
 });
 
-// DELETE all dividends for a ticker
-app.delete('/api/dividends', (req: Request, res: Response) => {
+// DELETE all transactions for a ticker
+app.delete('/api/transactions', (req: Request, res: Response) => {
     const ticker = req.query.ticker as string | undefined;
-    fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading dividends file');
-        let dividends: Array<{ ticker?: string }> = JSON.parse(data);
-        const remaining = ticker ? dividends.filter(d => d.ticker !== ticker) : [];
-        fs.writeFile(DIVIDENDS_FILE, JSON.stringify(remaining, null, 2), (writeErr) => {
-            if (writeErr) return res.status(500).send('Error writing dividends file');
-            res.status(200).json({ message: 'Dividends deleted', ticker });
-        });
-    });
-});
-
-// POST bulk dividends (CSV import)
-app.post('/api/dividends/bulk', (req: Request, res: Response) => {
-    const newDividends = req.body;
-    if (!Array.isArray(newDividends)) {
-        return res.status(400).json({ error: 'Expected an array' });
-    }
-    fs.readFile(DIVIDENDS_FILE, 'utf8', (err, data) => {
-        if (err) return res.status(500).send('Error reading dividends file');
-        const dividends = JSON.parse(data);
-        const updated = [...dividends, ...newDividends];
-        fs.writeFile(DIVIDENDS_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
-            if (writeErr) return res.status(500).send('Error writing dividends file');
-            res.status(201).json(newDividends);
+    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+        if (err) return res.status(500).send('Error reading transactions file');
+        let transactions: Array<{ ticker?: string }> = JSON.parse(data);
+        const remaining = ticker ? transactions.filter(t => t.ticker !== ticker) : [];
+        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(remaining, null, 2), (writeErr) => {
+            if (writeErr) return res.status(500).send('Error writing transactions file');
+            res.status(200).json({ message: 'Transactions deleted', ticker });
         });
     });
 });
@@ -278,7 +144,7 @@ app.post('/api/stocks', (req: Request, res: Response) => {
     });
 });
 
-// DELETE stock
+// DELETE stock (also removes all transactions for that ticker)
 app.delete('/api/stocks/:ticker', (req: Request, res: Response) => {
     const ticker = req.params.ticker;
     fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
@@ -291,7 +157,25 @@ app.delete('/api/stocks/:ticker', (req: Request, res: Response) => {
         }
         fs.writeFile(STOCKS_FILE, JSON.stringify(stocks, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing stocks file');
+            // Cascade: remove all transactions for this ticker
+            fs.readFile(TRANSACTIONS_FILE, 'utf8', (tErr, tData) => {
+                if (!tErr) {
+                    const remaining = (JSON.parse(tData) as Array<{ ticker?: string }>).filter(t => t.ticker !== ticker);
+                    fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(remaining, null, 2), () => {});
+                }
+            });
             res.status(200).json({ message: 'Stock deleted', ticker });
+        });
+    });
+});
+
+// DELETE all data (stocks + transactions)
+app.delete('/api/all', (_req: Request, res: Response) => {
+    fs.writeFile(STOCKS_FILE, JSON.stringify([], null, 2), (sErr) => {
+        if (sErr) return res.status(500).send('Error clearing stocks file');
+        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify([], null, 2), (tErr) => {
+            if (tErr) return res.status(500).send('Error clearing transactions file');
+            res.status(200).json({ message: 'All data deleted' });
         });
     });
 });
@@ -346,6 +230,63 @@ app.get('/api/price/:ticker', async (req: Request, res: Response) => {
         console.error('[price]', ticker, err);
         res.status(502).json({ error: 'Failed to fetch live price' });
     }
+});
+
+// GET aggregated summary per ticker (shares, invested, estimated value, dividends)
+app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
+    fs.readFile(TRANSACTIONS_FILE, 'utf8', async (err, data) => {
+        if (err) return res.status(500).send('Error reading transactions file');
+        const transactions: Array<{ ticker: string; type: string; price: number; quantity: number }> = JSON.parse(data);
+
+        const map: Record<string, { totalShares: number; totalBuyCost: number; totalSellProceeds: number; cashIncome: number; lastPrice: number; hasDividends: boolean }> = {};
+
+        // Must process chronologically so splits apply at the correct point
+        const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        for (const t of sorted) {
+            if (!map[t.ticker]) {
+                map[t.ticker] = { totalShares: 0, totalBuyCost: 0, totalSellProceeds: 0, cashIncome: 0, lastPrice: 0, hasDividends: false };
+            }
+            const s = map[t.ticker];
+            const isBuy = t.type === 'BUY' || t.type === 'purchase';
+            const isSell = t.type === 'SELL';
+            const isCashIncome = t.type === 'dividend' || t.type === 'MDIV' || t.type === 'CDIV' || t.type === 'SLIP';
+            const isDividend = t.type === 'dividend' || t.type === 'MDIV' || t.type === 'CDIV';
+            const isSplit = t.type === 'SPLIT';
+            if (isBuy) { s.totalShares += t.quantity; s.totalBuyCost += t.price * t.quantity; s.lastPrice = t.price; }
+            else if (isSell) { s.totalShares -= t.quantity; s.totalSellProceeds += t.price * t.quantity; }
+            else if (isCashIncome) { s.cashIncome += t.price * t.quantity; if (isDividend) s.hasDividends = true; }
+            else if (isSplit) { s.totalShares *= t.quantity; if (s.lastPrice > 0) s.lastPrice /= t.quantity; }
+        }
+
+        // Fetch live prices for all tickers so the filter uses current market value
+        const livePrices: Record<string, number> = {};
+        await Promise.allSettled(
+            Object.keys(map).map(async (ticker) => {
+                try {
+                    const quote = await yahooFinance.quote(toYfTicker(ticker));
+                    if (quote?.regularMarketPrice != null) livePrices[ticker] = quote.regularMarketPrice;
+                } catch { /* fall back to last purchase price */ }
+            })
+        );
+
+        const result: Record<string, { totalShares: number; totalInvested: number; sellProceeds: number; cashIncome: number; marketValue: number; totalReturn: number; hasDividends: boolean }> = {};
+        for (const [ticker, s] of Object.entries(map)) {
+            const price = livePrices[ticker] ?? s.lastPrice;
+            const netInvested = s.totalBuyCost - s.totalSellProceeds;
+            const marketValue = +(s.totalShares * price).toFixed(2);
+            result[ticker] = {
+                totalShares: +(s.totalShares.toFixed(6)),
+                totalInvested: +(s.totalBuyCost.toFixed(2)),
+                sellProceeds: +(s.totalSellProceeds.toFixed(2)),
+                cashIncome: +(s.cashIncome.toFixed(2)),
+                marketValue,
+                totalReturn: +(marketValue + s.cashIncome - netInvested).toFixed(2),
+                hasDividends: s.hasDividends,
+            };
+        }
+        res.json(result);
+    });
 });
 
 app.listen(PORT, () => {
