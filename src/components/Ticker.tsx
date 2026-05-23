@@ -16,7 +16,10 @@ interface TickerProps {
   activeInvestmentYears?: number | null;
 }
 
-const LABEL_STYLE: React.CSSProperties = { fontSize: '0.7rem', color: '#6b7280' };
+const LABEL_STYLE: React.CSSProperties = {
+  fontSize: "0.7rem",
+  color: "#6b7280",
+};
 
 const Ticker = ({
   symbol,
@@ -36,14 +39,28 @@ const Ticker = ({
   const netInvested = totalInvested - sellProceeds;
   const totalGainDollars = marketValue + cashIncome - netInvested;
   const totalReturn =
-    totalInvested > 0
-      ? (totalGainDollars / totalInvested) * 100
-      : null;
+    totalInvested > 0 ? (totalGainDollars / totalInvested) * 100 : null;
 
-  const yearsHeld =
-    earliestPurchaseDate
-      ? (Date.now() - new Date(earliestPurchaseDate).getTime()) / (1000 * 60 * 60 * 24 * 365.25)
-      : null;
+  const yearsHeld = earliestPurchaseDate
+    ? (Date.now() - new Date(earliestPurchaseDate).getTime()) /
+      (1000 * 60 * 60 * 24 * 365.25)
+    : null;
+
+  const heldDuration = (() => {
+    if (!earliestPurchaseDate) return null;
+    const start = new Date(earliestPurchaseDate);
+    const now = new Date();
+    let years = now.getFullYear() - start.getFullYear();
+    let months = now.getMonth() - start.getMonth();
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+    const parts: string[] = [];
+    if (years > 0) parts.push(`${years} year${years !== 1 ? "s" : ""}`);
+    if (months > 0) parts.push(`${months} month${months !== 1 ? "s" : ""}`);
+    return parts.length > 0 ? parts.join(", ") : "< 1 month";
+  })();
 
   const dividendReturnPct =
     totalInvested > 0 && dividendIncome > 0
@@ -51,9 +68,7 @@ const Ticker = ({
       : null;
 
   const effectiveYears =
-    yearsHeld !== null && yearsHeld < 1
-      ? yearsHeld
-      : activeInvestmentYears;
+    yearsHeld !== null && yearsHeld < 1 ? yearsHeld : activeInvestmentYears;
 
   const avgAnnualReturn =
     totalReturn !== null && effectiveYears !== null && effectiveYears > 0
@@ -71,11 +86,10 @@ const Ticker = ({
       style={{ display: "flex", flexDirection: "row" }}
     >
       <div style={{ width: "33.333%" }} className="flex flex-col gap-0.5">
-        <TrendingUp className="text-accent-purple" size={20} />
         <h1 className="text-3xl font-bold leading-tight">{symbol}</h1>
         <p className="text-text-secondary text-sm">{name ?? "Stock Tracker"}</p>
-        <p style={{ ...LABEL_STYLE, marginTop: '4px' }}>Current Price</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <p style={{ ...LABEL_STYLE, marginTop: "4px" }}>Current Price</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span className="text-accent-green font-semibold text-sm">
             $
             {price.toLocaleString(undefined, {
@@ -84,14 +98,27 @@ const Ticker = ({
             })}
           </span>
           {isLive && (
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', color: '#22c55e', border: '1px solid #22c55e', borderRadius: '4px', padding: '0 4px', lineHeight: '1.4' }}>
+            <span
+              style={{
+                fontSize: "0.65rem",
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+                color: "#22c55e",
+                border: "1px solid #22c55e",
+                borderRadius: "4px",
+                padding: "0 4px",
+                lineHeight: "1.4",
+              }}
+            >
               LIVE
             </span>
           )}
         </div>
         {avgPurchasePrice !== null && (
           <>
-            <p style={{ ...LABEL_STYLE, marginTop: '4px' }}>Avg Purchase Price</p>
+            <p style={{ ...LABEL_STYLE, marginTop: "4px" }}>
+              Avg Purchase Price
+            </p>
             <span className="text-accent-green font-semibold text-sm">
               $
               {avgPurchasePrice.toLocaleString(undefined, {
@@ -101,9 +128,23 @@ const Ticker = ({
             </span>
           </>
         )}
+        {heldDuration !== null && (
+          <>
+            <p style={{ ...LABEL_STYLE, marginTop: "4px" }}>Held</p>
+            <span
+              className="font-semibold text-sm"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {heldDuration}
+            </span>
+          </>
+        )}
       </div>
 
-      <div style={{ width: "33.333%" }} className="flex items-center justify-center">
+      <div
+        style={{ width: "33.333%" }}
+        className="flex items-center justify-center"
+      >
         <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4">
           <div style={LABEL_STYLE}>Market Value</div>
           <div
@@ -117,7 +158,9 @@ const Ticker = ({
             })}
           </div>
           <div className="text-sm mt-2">
-            <span className="text-accent-blue font-semibold">{totalShares.toLocaleString()}</span>
+            <span className="text-accent-blue font-semibold">
+              {totalShares.toLocaleString()}
+            </span>
             <span className="text-white"> shares held</span>
           </div>
           <div className="text-sm mt-1 flex gap-1">
@@ -134,7 +177,15 @@ const Ticker = ({
             <>
               <div className="text-sm mt-1 flex gap-1">
                 <span style={LABEL_STYLE}>Total Gain:</span>
-                <span className="font-semibold" style={{ color: totalGainDollars >= 0 ? 'var(--success-green)' : 'var(--danger-red, #f87171)' }}>
+                <span
+                  className="font-semibold"
+                  style={{
+                    color:
+                      totalGainDollars >= 0
+                        ? "var(--success-green)"
+                        : "var(--danger-red, #f87171)",
+                  }}
+                >
                   {totalGainDollars >= 0 ? "+" : "-"}$
                   {Math.abs(totalGainDollars).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
@@ -174,7 +225,11 @@ const Ticker = ({
                       {avgAnnualReturn.toFixed(2)}%
                     </span>
                     <span style={LABEL_STYLE}>
-                      ({effectiveYears < 1 ? effectiveYears.toFixed(2) : effectiveYears} yr{effectiveYears !== 1 ? "s" : ""})
+                      (
+                      {effectiveYears < 1
+                        ? effectiveYears.toFixed(2)
+                        : effectiveYears}{" "}
+                      yr{effectiveYears !== 1 ? "s" : ""})
                     </span>
                   </div>
                   <div className="text-sm mt-1 flex gap-1">
@@ -189,7 +244,9 @@ const Ticker = ({
                       }}
                     >
                       {totalGainDollars >= 0 ? "+" : "-"}$
-                      {Math.abs(totalGainDollars / effectiveYears).toLocaleString(undefined, {
+                      {Math.abs(
+                        totalGainDollars / effectiveYears,
+                      ).toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -207,7 +264,9 @@ const Ticker = ({
                       }}
                     >
                       {totalGainDollars >= 0 ? "+" : "-"}$
-                      {Math.abs(totalGainDollars / effectiveYears / 12).toLocaleString(undefined, {
+                      {Math.abs(
+                        totalGainDollars / effectiveYears / 12,
+                      ).toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -221,7 +280,10 @@ const Ticker = ({
       </div>
 
       {cashIncome > 0 && (
-        <div style={{ width: "33.333%" }} className="flex items-center justify-end">
+        <div
+          style={{ width: "33.333%" }}
+          className="flex items-center justify-end"
+        >
           <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4">
             <div style={LABEL_STYLE}>Cash Income</div>
             <div
@@ -234,9 +296,28 @@ const Ticker = ({
                 maximumFractionDigits: 2,
               })}
             </div>
+            {dividendIncome > 0 && (
+              <>
+                <div style={{ ...LABEL_STYLE, marginTop: "4px" }}>
+                  Dividend Income
+                </div>
+                <div
+                  className="text-sm font-semibold"
+                  style={{ color: "var(--accent-green)" }}
+                >
+                  $
+                  {dividendIncome.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              </>
+            )}
             {dividendReturnPct !== null && (
               <>
-                <div style={{ ...LABEL_STYLE, marginTop: '4px' }}>Dividend % Gain</div>
+                <div style={{ ...LABEL_STYLE, marginTop: "4px" }}>
+                  Dividend % Gain
+                </div>
                 <div
                   className="text-sm font-semibold"
                   style={{
@@ -253,7 +334,9 @@ const Ticker = ({
             )}
             {effectiveAnnualReturn !== null && (
               <>
-                <div style={{ ...LABEL_STYLE, marginTop: '4px' }}>Effective Annual Return</div>
+                <div style={{ ...LABEL_STYLE, marginTop: "4px" }}>
+                  Effective Annual Return
+                </div>
                 <div
                   className="text-sm font-semibold"
                   style={{

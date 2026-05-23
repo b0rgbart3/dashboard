@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
-import { BarChart3, Upload, Trash2 } from "lucide-react";
+import { useRef, useState, useEffect, useMemo } from "react";
+import { BarChart3, Upload, Trash2, RefreshCw } from "lucide-react";
 import { parse, parseISO, isValid, format } from "date-fns";
-import type { EntryType } from "./types";
+import type { EntryType, Stock, StockSummary } from "./types";
 
 interface HomePageProps {
-  onNavigateToDashboard: () => void;
+  onNavigateToDashboard: (ticker?: string) => void;
   message?: string | null;
   onClearMessage?: () => void;
 }
@@ -84,7 +84,22 @@ const parseCSV = (text: string): string[][] => {
 
 const stripNumeric = (s: string) => s.replace(/[$,()\s]/g, "");
 
+function formatHeldDuration(date: string | null): string {
+  if (!date) return "—";
+  const start = new Date(date);
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  if (months < 0) { years--; months += 12; }
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years}y`);
+  if (months > 0) parts.push(`${months}mo`);
+  return parts.length > 0 ? parts.join(" ") : "< 1mo";
+}
+
 const REQUIRED_COLUMNS = ["activity date", "instrument", "trans code", "quantity", "price"] as const;
+
+type SortKey = "ticker" | "name" | "totalValue" | "totalGain" | "gainPct" | "annualGainPct" | "dividends" | "slipIncome" | "purchaseDate" | "rating";
 
 const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePageProps) => {
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -92,12 +107,132 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
   const [importing, setImporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [summaries, setSummaries] = useState<Record<string, StockSummary>>({});
+  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [summariesLoaded, setSummariesLoaded] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("rating");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleSort = (key: SortKey, defaultDir: "asc" | "desc") => {
+    if (key === sortKey) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(defaultDir);
+    }
+  };
+
+  useEffect(() => {
+    Promise.all([
+      fetch("http://localhost:5001/api/stocks").then((r) => r.json()),
+      fetch("http://localhost:5001/api/stocks/summary").then((r) => r.json()),
+    ]).then(([stocksData, summaryData]: [Stock[], Record<string, StockSummary>]) => {
+      setStocks(stocksData);
+      setSummaries(summaryData);
+      setSummariesLoaded(true);
+      // Auto-update stocks whose name is just the ticker, or that are missing shortName
+      (stocksData as Stock[]).filter(s => s.name === s.ticker || !s.shortName).forEach(async (stock) => {
+        try {
+          const res = await fetch(`http://localhost:5001/api/lookup/${stock.ticker}`);
+          if (!res.ok) return;
+          const { name, shortName } = await res.json() as { name: string; shortName: string };
+          const patch: Record<string, string> = {};
+          if (name && name !== stock.ticker && name !== stock.name) patch.name = name;
+          if (shortName && shortName !== stock.shortName) patch.shortName = shortName;
+          if (Object.keys(patch).length > 0) {
+            setStocks(prev => prev.map(s => s.ticker === stock.ticker ? { ...s, ...patch } : s));
+            fetch(`http://localhost:5001/api/stocks/${stock.ticker}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(patch),
+            }).catch(() => {});
+          }
+        } catch { /* ignore */ }
+      });
+    }).catch(() => setSummariesLoaded(true));
+  }, []);
+
+  const tableRows = useMemo(() => {
+    const rows = Object.entries(summaries)
+      .filter(([, s]) => s.totalShares > 0 && s.marketValue > 1000)
+      .map(([ticker, s]) => ({
+        ticker,
+        name: (() => { const st = stocks.find(s => s.ticker === ticker); return st?.shortName ?? st?.name ?? ticker; })(),
+        totalValue: s.marketValue,
+        totalGain: s.totalReturn,
+        totalInvested: s.totalInvested,
+        dividends: s.dividendIncome,
+        ytdDividends: s.ytdDividendIncome ?? 0,
+        slipIncome: s.slipIncome,
+        ytdSlipIncome: s.ytdSlipIncome ?? 0,
+        gainPct: s.totalInvested > 0 ? (s.totalReturn / s.totalInvested) * 100 : 0,
+        yearsHeld: s.earliestPurchaseDate
+          ? (Date.now() - new Date(s.earliestPurchaseDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+          : null,
+        annualGainPct: (() => {
+          if (!s.earliestPurchaseDate || s.totalInvested <= 0) return null;
+          const years = (Date.now() - new Date(s.earliestPurchaseDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+          if (years < 1 / 12) return null;
+          const factor = 1 + s.totalReturn / s.totalInvested;
+          if (factor <= 0) return null;
+          return (Math.pow(factor, 1 / years) - 1) * 100;
+        })(),
+        lengthHeld: formatHeldDuration(s.earliestPurchaseDate),
+        purchaseDate: s.earliestPurchaseDate,
+        rating: s.rating,
+      }));
+
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "ticker": cmp = a.ticker.localeCompare(b.ticker); break;
+        case "name":   cmp = a.name.localeCompare(b.name); break;
+        case "totalValue": cmp = a.totalValue - b.totalValue; break;
+        case "totalGain":  cmp = a.totalGain - b.totalGain; break;
+        case "gainPct":       cmp = a.gainPct - b.gainPct; break;
+        case "annualGainPct": cmp = (a.annualGainPct ?? -Infinity) - (b.annualGainPct ?? -Infinity); break;
+        case "dividends":     cmp = a.dividends - b.dividends; break;
+        case "slipIncome":    cmp = a.slipIncome - b.slipIncome; break;
+        case "purchaseDate": {
+          const dA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : Infinity;
+          const dB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : Infinity;
+          cmp = dA - dB;
+          break;
+        }
+        case "rating":
+          cmp = (a.rating ?? -1) - (b.rating ?? -1);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return rows;
+  }, [summaries, stocks, sortKey, sortDir]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetch("http://localhost:5001/api/stocks/summary/refresh", { method: "POST" });
+      const [stocksData, summaryData] = await Promise.all([
+        fetch("http://localhost:5001/api/stocks").then((r) => r.json()),
+        fetch("http://localhost:5001/api/stocks/summary").then((r) => r.json()),
+      ]);
+      setStocks(stocksData);
+      setSummaries(summaryData);
+    } catch {
+      // silently fail — stale data is still shown
+    }
+    setRefreshing(false);
+  };
 
   const handleDeleteAll = async () => {
     setDeleting(true);
     try {
       const res = await fetch("http://localhost:5001/api/all", { method: "DELETE" });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      setSummaries({});
+      setStocks([]);
       setImportStatus("All data deleted.");
     } catch (err) {
       setImportStatus(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -153,6 +288,7 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
     const entries: PendingTransaction[] = [];
     const errors: string[] = [];
     let skippedCount = 0;
+    const mrgsTickers = new Set<string>();
 
     // Sort data rows chronologically (oldest first) so split ratio computation is correct.
     // Robinhood exports are typically newest-first, so we reverse here.
@@ -220,7 +356,9 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
       }
 
       if (rawCode === 'SPR') {
-        // SPR always arrives as a consecutive pair: row1 = old total, row2 = new total.
+        // SPR arrives as a consecutive pair showing the pre-split and post-split totals.
+        // Export order is not guaranteed, so we use the running qty to identify which
+        // row is the pre-split total (should be closest to our tracked running count).
         const nextCols = dataRows[i + 1];
         if (nextCols) {
           const nextCode   = nextCols[colIndex["trans code"]]?.trim().toUpperCase();
@@ -229,14 +367,27 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
           const nextQtyRaw = nextCols[colIndex["quantity"]]?.trim() ?? "";
           const nextQty    = nextQtyRaw ? parseFloat(stripNumeric(nextQtyRaw)) : NaN;
           if (nextCode === 'SPR' && nextTicker === ticker && nextDate === rawDate && !isNaN(nextQty) && qty > 0) {
-            const ratio = nextQty / qty;
-            entries.push({ date, type: 'SPLIT', quantity: +ratio.toFixed(8), price: 0, ticker });
-            runningQtys[ticker] = nextQty;
+            const priorQty = runningQtys[ticker] ?? 0;
+            // Identify which value is the pre-split total by proximity to running qty
+            let oldQty: number, newQty: number;
+            if (priorQty > 0 && Math.abs(nextQty - priorQty) < Math.abs(qty - priorQty)) {
+              oldQty = nextQty; newQty = qty;
+            } else {
+              oldQty = qty; newQty = nextQty;
+            }
+            const ratio = oldQty > 0 ? +(newQty / oldQty).toFixed(8) : 1;
+            entries.push({ date, type: 'SPLIT', quantity: ratio, price: 0, ticker });
+            runningQtys[ticker] = newQty;
             i++; // consume the second SPR row
             continue;
           }
         }
         errors.push(`Row ${i + 1}: unpaired SPR for ${ticker} on ${date} — skipped`);
+        continue;
+      }
+
+      if (rawCode === 'MRGS') {
+        mrgsTickers.add(ticker);
         continue;
       }
 
@@ -256,6 +407,14 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
         price,
         ticker,
       });
+    }
+
+    // Remove all entries for tickers that had a MRGS (merger) event — unsupported complexity
+    if (mrgsTickers.size > 0) {
+      const before = entries.length;
+      entries.splice(0, entries.length, ...entries.filter((e) => !mrgsTickers.has(e.ticker)));
+      const removed = before - entries.length;
+      if (removed > 0) skippedCount += removed;
     }
 
     if (entries.length === 0) {
@@ -279,10 +438,20 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
       const today = new Date().toISOString().split("T")[0];
       for (const ticker of uniqueTickers) {
         if (!existingTickers.has(ticker)) {
+          let name = ticker;
+          let shortName: string | undefined;
+          try {
+            const lookupRes = await fetch(`http://localhost:5001/api/lookup/${ticker}`);
+            if (lookupRes.ok) {
+              const lookupData = await lookupRes.json() as { name: string; shortName?: string };
+              if (lookupData.name && lookupData.name !== ticker) name = lookupData.name;
+              if (lookupData.shortName) shortName = lookupData.shortName;
+            }
+          } catch { /* fall back to ticker */ }
           await fetch("http://localhost:5001/api/stocks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: ticker, ticker, name: ticker, createdAt: today }),
+            body: JSON.stringify({ id: ticker, ticker, name, shortName, createdAt: today }),
           });
         }
       }
@@ -306,9 +475,18 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
 
       let status = `Imported ${entries.length} transaction${entries.length !== 1 ? "s" : ""} across ${uniqueTickers.length} ticker${uniqueTickers.length !== 1 ? "s" : ""} (${summary}).`;
       if (skippedCount > 0) status += `\nSkipped ${skippedCount} non-transaction row(s).`;
+      if (mrgsTickers.size > 0) status += `\nExcluded ${mrgsTickers.size} ticker(s) with MRGS (merger) transactions — not yet supported: ${[...mrgsTickers].sort().join(", ")}.`;
       if (errors.length > 0) status += `\n\nRow errors (${errors.length}):\n${errors.join("\n")}`;
       setImportStatus(status);
       onClearMessage?.();
+
+      await fetch("http://localhost:5001/api/stocks/summary/refresh", { method: "POST" });
+      const [refreshedStocks, refreshedSummary] = await Promise.all([
+        fetch("http://localhost:5001/api/stocks").then((r) => r.json()),
+        fetch("http://localhost:5001/api/stocks/summary").then((r) => r.json()),
+      ]);
+      setStocks(refreshedStocks);
+      setSummaries(refreshedSummary);
     } catch (err) {
       setImportStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -356,7 +534,7 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
 
       <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center" }}>
         <button
-          onClick={onNavigateToDashboard}
+          onClick={() => onNavigateToDashboard()}
           className="btn btn-primary"
           style={{
             display: "flex",
@@ -370,6 +548,25 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
           <BarChart3 size={20} />
           Open Dashboard
         </button>
+
+        {summariesLoaded && tableRows.length > 0 && (
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="btn btn-secondary"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "14px 32px",
+              fontSize: "1rem",
+              borderRadius: "12px",
+            }}
+          >
+            <RefreshCw size={20} style={refreshing ? { animation: "spin 1s linear infinite" } : undefined} />
+            {refreshing ? "Refreshing…" : "Refresh Prices"}
+          </button>
+        )}
 
         <button
           onClick={() => csvInputRef.current?.click()}
@@ -437,6 +634,194 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage }: HomePagePr
           </div>
         )}
       </div>
+
+      {(!summariesLoaded || importing) && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+          <div className="spinner" />
+          <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+            {importing ? "Importing transactions…" : "Rating portfolio…"}
+          </span>
+        </div>
+      )}
+
+      {summariesLoaded && !importing && tableRows.length > 0 && (
+        <div style={{ width: "100%", maxWidth: "960px" }}>
+          <h2 style={{ fontSize: "1rem", color: "var(--text-secondary)", marginBottom: "0.75rem", textAlign: "center", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            Portfolio Summary
+          </h2>
+          <div className="glass-card" style={{ padding: 0, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem", tableLayout: "auto" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  {([
+                    { label: "Ticker",     key: "ticker",       align: "left",  defaultDir: "asc"  },
+                    { label: "Name",       key: "name",         align: "left",  defaultDir: "asc"  },
+                    { label: "Value",      key: "totalValue",   align: "right", defaultDir: "desc" },
+                    { label: "G/L $",      key: "totalGain",    align: "right", defaultDir: "desc" },
+                    { label: "Total %",    key: "gainPct",       align: "right", defaultDir: "desc" },
+                    { label: "Annual %",   key: "annualGainPct", align: "right", defaultDir: "desc" },
+                    { label: "Divs",       key: "dividends",     align: "right", defaultDir: "desc" },
+                    { label: "Cash",       key: "slipIncome",    align: "right", defaultDir: "desc" },
+                    { label: "Held",         key: "purchaseDate",  align: "right", defaultDir: "desc" },
+                    { label: "Rating",     key: "rating",       align: "right", defaultDir: "desc" },
+                  ] as { label: string; key: SortKey; align: "left" | "right"; defaultDir: "asc" | "desc" }[]).map(({ label, key, align, defaultDir }) => {
+                    const active = sortKey === key;
+                    return (
+                      <th
+                        key={key}
+                        onClick={() => handleSort(key, defaultDir)}
+                        style={{
+                          padding: "8px 8px",
+                          textAlign: align,
+                          color: active ? "var(--text-primary)" : "var(--text-secondary)",
+                          fontWeight: active ? 700 : 500,
+                          fontSize: "0.78rem",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                          whiteSpace: "nowrap",
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        {label}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map((row, i) => {
+                  const gainColor = row.totalGain > 5000 ? "#00ff88" : row.totalGain >= 0 ? "var(--success-green)" : "#ef4444";
+                  const ratingColor = row.rating === null ? "var(--text-secondary)"
+                    : row.rating >= 7 ? "var(--success-green)"
+                    : row.rating >= 4 ? "#f59e0b"
+                    : "#ef4444";
+                  return (
+                    <tr
+                      key={row.ticker}
+                      style={{ borderBottom: i < tableRows.length - 1 ? "1px solid var(--border)" : undefined, cursor: "pointer", transition: "background 0.15s" }}
+                      onClick={() => onNavigateToDashboard(row.ticker)}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                    >
+                      <td style={{ padding: "8px 8px", fontWeight: 700, color: "var(--text-primary)" }}>{row.ticker}</td>
+                      <td style={{ padding: "8px 8px", color: "var(--text-secondary)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: "var(--text-primary)" }}>
+                        ${row.totalValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: gainColor, fontWeight: 600 }}>
+                        {row.totalGain >= 0 ? "+" : "-"}${Math.abs(row.totalGain).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: gainColor }}>
+                        {row.gainPct >= 0 ? "+" : ""}{row.gainPct.toFixed(1)}%
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: row.annualGainPct == null ? "var(--text-secondary)" : row.annualGainPct >= 0 ? gainColor : "#ef4444" }}>
+                        {row.annualGainPct == null ? "—" : `${row.annualGainPct >= 0 ? "+" : ""}${row.annualGainPct.toFixed(1)}%`}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: row.dividends > 0 ? "var(--success-green)" : "var(--text-secondary)" }}>
+                        {row.dividends > 0 ? `$${row.dividends.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—"}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: row.slipIncome > 0 ? "var(--success-green)" : "var(--text-secondary)" }}>
+                        {row.slipIncome > 0 ? `$${row.slipIncome.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—"}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: "var(--text-secondary)" }}>{row.lengthHeld}</td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: ratingColor, fontWeight: 700 }}>
+                        {row.rating !== null ? `${row.rating} / 10` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                {(() => {
+                  const totalValue    = tableRows.reduce((sum, r) => sum + r.totalValue, 0);
+                  const totalGain     = tableRows.reduce((sum, r) => sum + r.totalGain, 0);
+                  const totalInvested  = tableRows.reduce((sum, r) => sum + r.totalInvested, 0);
+                  const totalDividends = tableRows.reduce((sum, r) => sum + r.dividends, 0);
+                  const totalYtdDividends = tableRows.reduce((sum, r) => sum + r.ytdDividends, 0);
+                  const now = new Date();
+                  const monthsElapsed = now.getMonth() + 1 + now.getDate() / new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - 1;
+                  const ytdPerMonth = monthsElapsed > 0 ? totalYtdDividends / monthsElapsed : 0;
+                  const totalSlip      = tableRows.reduce((sum, r) => sum + r.slipIncome, 0);
+                  const totalYtdSlip   = tableRows.reduce((sum, r) => sum + r.ytdSlipIncome, 0);
+                  const totalGainPct  = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+                  const glColor       = totalGain >= 0 ? "var(--success-green)" : "#ef4444";
+                  const rowsWithAnnual = tableRows.filter(r => r.annualGainPct != null && r.yearsHeld != null);
+                  const wNum = rowsWithAnnual.reduce((sum, r) => sum + r.annualGainPct! * r.totalInvested * r.yearsHeld!, 0);
+                  const wDen = rowsWithAnnual.reduce((sum, r) => sum + r.totalInvested * r.yearsHeld!, 0);
+                  const weightedAnnualGainPct = wDen > 0 ? wNum / wDen : null;
+                  const simpleAnnualGainPct = rowsWithAnnual.length > 0
+                    ? rowsWithAnnual.reduce((sum, r) => sum + r.annualGainPct!, 0) / rowsWithAnnual.length
+                    : null;
+                  const longestHeld   = tableRows.reduce<typeof tableRows[number] | null>((oldest, r) => {
+                    if (!r.purchaseDate) return oldest;
+                    if (!oldest?.purchaseDate) return r;
+                    return r.purchaseDate < oldest.purchaseDate ? r : oldest;
+                  }, null);
+                  return (
+                    <tr style={{ borderTop: "2px solid rgba(255,255,255,0.2)" }}>
+                      <td colSpan={2} style={{ padding: "8px 8px", fontWeight: 700, fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-primary)" }}>
+                        Total
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", fontWeight: 700, color: "var(--text-primary)" }}>
+                        ${totalValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", fontWeight: 700, color: glColor }}>
+                        {totalGain >= 0 ? "+" : "-"}${Math.abs(totalGain).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", fontWeight: 700, color: glColor }}>
+                        {totalGainPct >= 0 ? "+" : ""}{totalGainPct.toFixed(1)}%
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right" }}>
+                        <div style={{ fontWeight: 700, color: weightedAnnualGainPct == null ? "var(--text-secondary)" : weightedAnnualGainPct >= 0 ? glColor : "#ef4444" }}>
+                          {weightedAnnualGainPct == null ? "—" : `${weightedAnnualGainPct >= 0 ? "+" : ""}${weightedAnnualGainPct.toFixed(1)}%`}
+                          <span style={{ fontSize: "0.65rem", fontWeight: 400, color: "var(--text-secondary)", marginLeft: "3px" }}>wtd</span>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: simpleAnnualGainPct == null ? "var(--text-secondary)" : simpleAnnualGainPct >= 0 ? glColor : "#ef4444" }}>
+                          {simpleAnnualGainPct == null ? "—" : `${simpleAnnualGainPct >= 0 ? "+" : ""}${simpleAnnualGainPct.toFixed(1)}%`}
+                          <span style={{ fontSize: "0.65rem", color: "var(--text-secondary)", marginLeft: "3px" }}>avg</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right" }}>
+                        <div style={{ fontWeight: 700, color: totalDividends > 0 ? "var(--success-green)" : "var(--text-secondary)" }}>
+                          {totalDividends > 0 ? `$${totalDividends.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—"}
+                        </div>
+                        {totalYtdDividends > 0 && (
+                          <>
+                            <div style={{ fontSize: "0.78rem", color: "var(--success-green)" }}>
+                              {`$${totalYtdDividends.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
+                              <span style={{ fontSize: "0.65rem", color: "var(--text-secondary)", marginLeft: "3px" }}>ytd</span>
+                            </div>
+                            <div style={{ fontSize: "0.78rem", color: "var(--success-green)" }}>
+                              {`$${ytdPerMonth.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
+                              <span style={{ fontSize: "0.65rem", color: "var(--text-secondary)", marginLeft: "3px" }}>/mo</span>
+                            </div>
+                          </>
+                        )}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right" }}>
+                        <div style={{ fontWeight: 700, color: totalSlip > 0 ? "var(--success-green)" : "var(--text-secondary)" }}>
+                          {totalSlip > 0 ? `$${totalSlip.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—"}
+                        </div>
+                        {totalYtdSlip > 0 && (
+                          <div style={{ fontSize: "0.78rem", color: "var(--success-green)" }}>
+                            {`$${totalYtdSlip.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
+                            <span style={{ fontSize: "0.65rem", color: "var(--text-secondary)", marginLeft: "3px" }}>ytd</span>
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", color: "var(--text-secondary)" }}>
+                        {longestHeld ? longestHeld.lengthHeld : "—"}
+                      </td>
+                      <td />
+                    </tr>
+                  );
+                })()}
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       {importStatus && (
         <div

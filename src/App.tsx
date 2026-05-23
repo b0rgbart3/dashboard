@@ -11,7 +11,7 @@ function App() {
     <div className="App">
       {page === 'home'
         ? <HomePage
-            onNavigateToDashboard={() => { setHomeMessage(null); setPage('dashboard'); }}
+            onNavigateToDashboard={(ticker?: string) => { setHomeMessage(null); if (ticker) window.location.hash = ticker; setPage('dashboard'); }}
             message={homeMessage}
             onClearMessage={() => setHomeMessage(null)}
           />

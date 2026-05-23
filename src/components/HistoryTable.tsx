@@ -1,6 +1,6 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment } from 'react';
 import { format, parse } from 'date-fns';
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import type { Transaction } from '../types';
 
 interface HistoryTableProps {
@@ -8,17 +8,11 @@ interface HistoryTableProps {
     onSortToggle: () => void;
     sortOrder: 'asc' | 'desc';
     onDelete: (id: number) => void;
+    onDeleteAll?: () => void;
 }
 
-const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryTableProps) => {
-    const [isCompact, setIsCompact] = useState(window.innerWidth < 1024);
-    useEffect(() => {
-        const handleResize = () => setIsCompact(window.innerWidth < 1024);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    const numFmt: Intl.NumberFormatOptions = { minimumFractionDigits: 2 };
+const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: HistoryTableProps) => {
+    const numFmt: Intl.NumberFormatOptions = { maximumFractionDigits: 2 };
 
     const chronological = [...purchases].sort((a, b) => {
         const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -63,6 +57,17 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
         }
     }
 
+    const lastChronEntry = [...chronological].reverse().find(p => p.type !== 'SLIP' && p.type !== 'SPLIT');
+    let grandTotalValue = 0;
+    let grandTotalGainLoss = 0;
+    if (lastChronEntry) {
+        const adjLast = forwardAdjustment(lastChronEntry.date);
+        const adjSharesLast = accumulatedQtyMap[lastChronEntry.id] * adjLast;
+        grandTotalValue = adjSharesLast * lastPrice;
+        grandTotalGainLoss = grandTotalValue - totalSpentMap[lastChronEntry.id];
+    }
+    const grandGlColor = grandTotalGainLoss >= 0 ? 'var(--success-green)' : '#ef4444';
+
     if (purchases.length === 0) {
         return (
             <div className="h-40 flex items-center justify-center text-text-secondary italic">
@@ -77,6 +82,18 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
         </span>
     );
 
+    const formatDate = (dateStr: string) => {
+        const d = parse(dateStr, 'yyyy-MM-dd', new Date());
+        const monthDay = format(d, 'MMM d,');
+        const year = format(d, 'yyyy');
+        return (
+            <>
+                {monthDay}{' '}
+                <span style={{ fontSize: '0.7rem' }}>{year}</span>
+            </>
+        );
+    };
+
     return (
         <div className="overflow-x-auto">
             <table>
@@ -84,21 +101,20 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                     <tr>
                         <th
                             className="cursor-pointer hover:text-white transition-colors select-none"
-                            style={{ cursor: 'pointer' }}
+                            style={{ cursor: 'pointer', width: '95px' }}
                             onClick={onSortToggle}
                         >
-                            <div className="flex items-center gap-1 cursor-pointer">
-                                Date
-                                {sortOrder === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                            </div>
+                            Date
                         </th>
-                        <th>Type</th>
+                        <th style={{ width: '70px' }}>Type</th>
                         <th>Price</th>
                         <th>Qty</th>
                         <th>Cost</th>
-                        <th>Total Spent</th>
+                        <th>Spent</th>
                         <th>Shares</th>
                         <th>Value</th>
+                        <th>Gain/Loss</th>
+                        <th>G/L %</th>
                         <th className="text-right">Action</th>
                     </tr>
                 </thead>
@@ -114,14 +130,13 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
 
                         // ── SPLIT row ──────────────────────────────────────────────────
                         if (p.type === 'SPLIT') {
-                            const adjShares = accumulatedQtyMap[p.id];
                             const ratioLabel = p.quantity >= 1
                                 ? `×${+p.quantity.toFixed(4).replace(/\.?0+$/, '')} Split`
                                 : `÷${+(1 / p.quantity).toFixed(4).replace(/\.?0+$/, '')} Rev Split`;
                             return (
                                 <Fragment key={p.id}>
                                     <tr className={isMonthStart ? 'month-divider' : undefined} style={{ opacity: 0.75 }}>
-                                        <td>{format(parse(p.date, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}</td>
+                                        <td>{formatDate(p.date)}</td>
                                         <td>
                                             <span
                                                 className="badge"
@@ -130,6 +145,8 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                                                 {ratioLabel}
                                             </span>
                                         </td>
+                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
+                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
                                         <td style={{ color: 'var(--text-secondary)' }}>—</td>
                                         <td style={{ color: 'var(--text-secondary)' }}>—</td>
                                         <td style={{ color: 'var(--text-secondary)' }}>—</td>
@@ -146,7 +163,7 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                                         <tr className="month-total-row">
                                             <td colSpan={4} className="month-total-label">{monthLabel} Total</td>
                                             <td className="month-total-value">${monthTotal.toLocaleString(undefined, numFmt)}</td>
-                                            <td colSpan={4} />
+                                            <td colSpan={6} />
                                         </tr>
                                     )}
                                 </Fragment>
@@ -159,11 +176,15 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                         const displayPrice = isAdjusted && isPurchaseType(p.type) ? p.price / adj : p.price;
                         const displayQty   = isAdjusted && (isPurchaseType(p.type) || p.type === 'SELL') ? p.quantity * adj : p.quantity;
                         const adjShares    = accumulatedQtyMap[p.id] * adj;
+                        const currentValue = adjShares * lastPrice;
+                        const gainLoss     = currentValue - totalSpentMap[p.id];
+                        const gainLossPct  = totalSpentMap[p.id] > 0 ? (gainLoss / totalSpentMap[p.id]) * 100 : 0;
+                        const glColor      = gainLoss >= 0 ? 'var(--success-green)' : '#ef4444';
 
                         return (
                             <Fragment key={p.id}>
                                 <tr className={isMonthStart ? 'month-divider' : undefined}>
-                                    <td>{format(parse(p.date, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}</td>
+                                    <td>{formatDate(p.date)}</td>
                                     <td>
                                         <span
                                             className={
@@ -175,42 +196,52 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                                             style={{ fontSize: '0.7rem', padding: '2px 8px' }}
                                         >
                                             {isDividendType(p.type)
-                                                ? (isCompact ? 'D' : p.type === 'dividend' ? 'Dividend' : p.type)
+                                                ? (p.type === 'dividend' ? 'Dividend' : p.type)
                                                 : p.type === 'SELL'
-                                                ? (isCompact ? 'S' : 'Sell')
+                                                ? 'Sell'
                                                 : isPurchaseType(p.type)
-                                                ? (isCompact ? 'B' : p.type === 'purchase' ? 'Purchase' : p.type)
+                                                ? (p.type === 'purchase' ? 'Purchase' : p.type)
                                                 : p.type}
                                         </span>
                                     </td>
                                     <td className="font-medium text-accent-green">
-                                        ${isCompact ? Math.trunc(displayPrice).toLocaleString() : displayPrice.toLocaleString(undefined, numFmt)}
+                                        ${displayPrice.toLocaleString(undefined, numFmt)}
                                         {isAdjusted && isPurchaseType(p.type) && adjTag}
                                     </td>
                                     <td>
-                                        {isCompact ? Math.trunc(displayQty).toLocaleString() : displayQty.toLocaleString()}
+                                        {displayQty.toLocaleString(undefined, numFmt)}
                                         {isAdjusted && (isPurchaseType(p.type) || p.type === 'SELL') && adjTag}
                                     </td>
                                     <td className="font-bold text-white">
-                                        ${isCompact ? Math.trunc(p.price * p.quantity).toLocaleString() : (p.price * p.quantity).toLocaleString(undefined, numFmt)}
+                                        ${(p.price * p.quantity).toLocaleString(undefined, numFmt)}
                                     </td>
                                     <td className="font-bold text-accent-purple">
                                         {p.type === 'SLIP'
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
-                                            : `$${isCompact ? Math.trunc(totalSpentMap[p.id]).toLocaleString() : totalSpentMap[p.id].toLocaleString(undefined, numFmt)}`}
+                                            : `$${totalSpentMap[p.id].toLocaleString(undefined, numFmt)}`}
                                     </td>
                                     <td className="font-mono">
                                         {p.type === 'SLIP'
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
                                             : <>
-                                                {isCompact ? Math.trunc(adjShares).toLocaleString() : adjShares.toLocaleString(undefined, numFmt)}
+                                                {adjShares.toLocaleString(undefined, numFmt)}
                                                 {isAdjusted && adjTag}
                                               </>}
                                     </td>
                                     <td className="font-bold text-accent-blue">
                                         {p.type === 'SLIP'
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
-                                            : `$${isCompact ? Math.trunc(adjShares * lastPrice).toLocaleString() : (adjShares * lastPrice).toLocaleString(undefined, numFmt)}`}
+                                            : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                                    </td>
+                                    <td className="font-bold" style={{ color: p.type === 'SLIP' ? undefined : glColor }}>
+                                        {p.type === 'SLIP'
+                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            : `${gainLoss >= 0 ? '+' : '-'}$${Math.abs(gainLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                                    </td>
+                                    <td style={{ color: p.type === 'SLIP' ? undefined : glColor }}>
+                                        {p.type === 'SLIP'
+                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            : `${gainLoss >= 0 ? '+' : ''}${gainLossPct.toFixed(1)}%`}
                                     </td>
                                     <td className="text-right">
                                         <button onClick={() => onDelete(p.id)} className="btn-delete" title="Delete Entry">
@@ -222,13 +253,43 @@ const HistoryTable = ({ purchases, onSortToggle, sortOrder, onDelete }: HistoryT
                                     <tr className="month-total-row">
                                         <td colSpan={4} className="month-total-label">{monthLabel} Total</td>
                                         <td className="month-total-value">${monthTotal.toLocaleString(undefined, numFmt)}</td>
-                                        <td colSpan={4} />
+                                        <td colSpan={6} />
                                     </tr>
                                 )}
                             </Fragment>
                         );
                     })}
                 </tbody>
+                <tfoot>
+                    <tr style={{ borderTop: '2px solid rgba(255,255,255,0.2)' }}>
+                        <td colSpan={7} style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
+                            Grand Total
+                        </td>
+                        <td className="font-bold text-accent-blue" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
+                            ${grandTotalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </td>
+                        <td className="font-bold" style={{ color: grandGlColor, paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
+                            {grandTotalGainLoss >= 0 ? '+' : '-'}${Math.abs(grandTotalGainLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </td>
+                        <td colSpan={2} />
+                    </tr>
+                    {onDeleteAll && (
+                        <tr>
+                            <td colSpan={10} />
+                            <td className="text-right" style={{ paddingTop: '8px' }}>
+                                <button
+                                    onClick={onDeleteAll}
+                                    className="btn-delete"
+                                    title="Clear all transactions"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 10px', fontSize: '0.75rem' }}
+                                >
+                                    <Trash2 size={14} />
+                                    Clear All
+                                </button>
+                            </td>
+                        </tr>
+                    )}
+                </tfoot>
             </table>
         </div>
     );

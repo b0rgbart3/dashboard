@@ -34,7 +34,8 @@ const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps
     const [targetIncome, setTargetIncome] = useState<string>('2400');
     const [projectionLength, setProjectionLength] = useState<string>('60');
     const [useTaper, setUseTaper] = useState<boolean>(true);
-    const [projectionOpen, setProjectionOpen] = useState<boolean>(true);
+    const [projectionOpen, setProjectionOpen] = useState<boolean>(false);
+    const [graphOpen, setGraphOpen] = useState<boolean>(false);
     const [showHistory, setShowHistory] = useState<boolean>(false);
     const [chartMounted, setChartMounted] = useState(false);
 
@@ -261,17 +262,18 @@ const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps
 
     return (
         <>
-        <section className="glass-card">
-            <button
-                onClick={() => setProjectionOpen(prev => !prev)}
+        <section className="glass-card" style={{ paddingBottom: projectionOpen ? undefined : 0 }}>
+            <div
                 className="accordion-header"
+                style={{ marginBottom: projectionOpen ? undefined : 0 }}
+                onClick={() => setProjectionOpen(prev => !prev)}
             >
-                <div className="flex items-center gap-2">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <PieChart className="text-accent-orange" size={24} />
                     <h2>{projMonths % 12 === 0 ? `${projMonths / 12} Year` : `${projMonths} Month`} Projection</h2>
                 </div>
                 {projectionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </button>
+            </div>
             {projectionOpen && <div className="space-y-8">
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '10px 24px', alignItems: 'center' }}>
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Monthly Stack (qty)</label>
@@ -378,19 +380,27 @@ const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps
             </div>}
         </section>
 
-        <section className="glass-card">
-                <div className="flex items-center gap-2 mb-6">
-                    <BarChart3 className="text-accent-orange" size={24} />
-                    <h2>Projection Graph</h2>
-                    <button
-                        onClick={() => setShowHistory(prev => !prev)}
-                        className="ml-auto text-xs px-3 py-1 rounded-full text-white transition-colors"
-                        style={{ background: '#38bdf8' }}
-                    >
-                        {showHistory ? 'Hide History' : 'Show History'}
-                    </button>
+        <section className="glass-card" style={{ paddingBottom: graphOpen ? undefined : 0 }}>
+                <div
+                    className="accordion-header"
+                    style={{ marginBottom: graphOpen ? undefined : 0 }}
+                    onClick={() => setGraphOpen(prev => !prev)}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <BarChart3 className="text-accent-orange" size={24} />
+                        <h2>Projection Graph</h2>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setShowHistory(prev => !prev); }}
+                            style={{ background: 'var(--primary-purple)', padding: '2px 12px', borderRadius: '9999px', fontSize: '12px', color: 'white', border: 'none', cursor: 'pointer' }}
+                        >
+                            {showHistory ? 'Hide History' : 'Show History'}
+                        </button>
+                        {graphOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </div>
                 </div>
-                <div style={{ height: '300px', width: '100%', position: 'relative' }}>
+                {graphOpen && <div style={{ height: '300px', width: '100%', position: 'relative' }}>
                     <div style={{
                         position: 'absolute', top: 8, right: 88, zIndex: 10,
                         display: 'flex', flexDirection: 'column', gap: '6px',
@@ -578,7 +588,7 @@ const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps
                             )}
                         </AreaChart>
                     </ResponsiveContainer>}
-                </div>
+                </div>}
             </section>
         </>
     );
