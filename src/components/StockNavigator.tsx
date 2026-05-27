@@ -9,9 +9,10 @@ interface StockNavigatorProps {
     onNavigate: (index: number) => void;
     onAddStock: () => void;
     onRemoveStock: () => void;
+    onBack: () => void;
 }
 
-const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAddStock, onRemoveStock }: StockNavigatorProps) => {
+const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAddStock, onRemoveStock, onBack }: StockNavigatorProps) => {
     const current = stocks[currentIndex];
     const isFirst = currentIndex === 0;
     const isLast = currentIndex === stocks.length - 1;
@@ -19,15 +20,15 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAd
     return (
         <div className="glass-card mb-4" style={{ padding: '12px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <a
-                    href="/"
+                <button
+                    onClick={onBack}
                     className="btn btn-secondary"
                     title="Back to home"
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', marginRight: '4px', textDecoration: 'none', fontSize: '14px' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', marginRight: '4px', fontSize: '14px' }}
                 >
                     <ArrowLeft size={16} />
                     Home
-                </a>
+                </button>
                 <button
                     onClick={onPrev}
                     disabled={isFirst}

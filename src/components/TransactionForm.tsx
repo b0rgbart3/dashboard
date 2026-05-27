@@ -80,6 +80,14 @@ const TransactionForm = ({ onAdd, onImport }: TransactionFormProps) => {
         if (val === 'mdiv') return 'MDIV';
         if (val === 'cdiv') return 'CDIV';
         if (val === 'split' || val === 'spl') return 'SPLIT';
+        if (val === 'rec') return 'REC';
+        if (val === 'dfee') return 'DFEE';
+        if (val === 'afee') return 'AFEE';
+        if (val === 'dtax') return 'DTAX';
+        if (val === 'mrgs') return 'MRGS';
+        if (val === 'mrgc') return 'MRGC';
+        if (val === 'mrgs_merger') return 'MRGS_MERGER';
+        if (val === 'mrgc_merger') return 'MRGC_MERGER';
         return null;
     };
 
@@ -110,14 +118,38 @@ const TransactionForm = ({ onAdd, onImport }: TransactionFormProps) => {
                     continue;
                 }
 
+                if (rawType.trim().toUpperCase() === 'BCXL') continue;
+
                 const entryType = parseTransactionType(rawType);
                 if (!entryType) {
-                    errors.push(`Row ${i + 1}: unrecognized type "${rawType}" (use purchase, dividend, BUY, SELL, SLIP, MDIV, CDIV, SPLIT)`);
+                    errors.push(`Row ${i + 1}: unrecognized type "${rawType}" (use purchase, dividend, BUY, SELL, SLIP, MDIV, CDIV, DTAX, DFEE, AFEE, MRGS, MRGC, MRGS_MERGER, MRGC_MERGER, SPLIT, REC, SPINOFF, SHARE_EXCHANGE, SHARE_EXCHANGE_OUT, RETURN_OF_CAPITAL)`);
                     continue;
                 }
 
-                const qty = parseFloat(rawQty);
-                const entryPrice = parseFloat(rawPrice.replace(/[$,]/g, ''));
+                let qty = parseFloat(rawQty);
+                let entryPrice = parseFloat(rawPrice.replace(/[$,]/g, ''));
+
+                // MRGS/MRGC are overloaded Robinhood codes. Disambiguate by quantity:
+                //   shares present (qty > 0) → merger corporate action
+                //   cash only (qty = 0/blank)  → margin interest
+                let resolvedType = entryType;
+                if (entryType === 'MRGS' && !isNaN(qty) && qty > 0) resolvedType = 'MRGS_MERGER';
+                if (entryType === 'MRGC' && !isNaN(qty) && qty > 0) resolvedType = 'MRGC_MERGER';
+
+                // Fee/margin rows often have blank Qty in Robinhood exports.
+                // Normalize to qty=1 and use the absolute amount from whatever column has it.
+                const isFeeEntry = resolvedType === 'DFEE' || resolvedType === 'AFEE' || resolvedType === 'DTAX' || resolvedType === 'MRGS' || resolvedType === 'MRGC';
+                if (isFeeEntry && (isNaN(qty) || qty === 0)) {
+                    qty = 1;
+                    if (isNaN(entryPrice)) {
+                        // Try a 5th "Amount" column present in some export formats
+                        const amountRaw = cols[4] ?? cols[8] ?? '';
+                        entryPrice = Math.abs(parseFloat(amountRaw.replace(/[$,]/g, '')));
+                    } else {
+                        entryPrice = Math.abs(entryPrice);
+                    }
+                }
+
                 if (isNaN(qty) || isNaN(entryPrice)) {
                     errors.push(`Row ${i + 1}: invalid quantity or price`);
                     continue;
@@ -125,7 +157,7 @@ const TransactionForm = ({ onAdd, onImport }: TransactionFormProps) => {
 
                 entries.push({
                     date: format(parsed, 'yyyy-MM-dd'),
-                    type: entryType,
+                    type: resolvedType,
                     quantity: qty,
                     price: entryPrice,
                     ticker: '',
@@ -202,6 +234,14 @@ const TransactionForm = ({ onAdd, onImport }: TransactionFormProps) => {
                     <option value="MDIV">MDIV</option>
                     <option value="CDIV">CDIV</option>
                     <option value="SPLIT">SPLIT (qty = ratio, e.g. 2.0)</option>
+                    <option value="DTAX">DTAX (Dividend Tax Withheld)</option>
+                    <option value="DFEE">DFEE (ADR Depositary Fee)</option>
+                    <option value="AFEE">AFEE (Account / Admin Fee)</option>
+                    <option value="MRGS">MRGS (Margin Interest Charged)</option>
+                    <option value="MRGC">MRGC (Margin Interest Credit)</option>
+                    <option value="MRGS_MERGER">MRGS_MERGER (Merger Share Conversion)</option>
+                    <option value="MRGC_MERGER">MRGC_MERGER (Merger Cash Component)</option>
+                    <option value="REC">REC (Transfer In / Received)</option>
                 </select>
             </div>
             <div className="input-group">

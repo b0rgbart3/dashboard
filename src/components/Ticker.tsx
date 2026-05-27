@@ -1,8 +1,9 @@
-import { TrendingUp } from "lucide-react";
+import { ReactNode, useState } from "react";
 
 interface TickerProps {
   symbol: string;
   name?: string;
+  description?: string;
   price: number;
   isLive?: boolean;
   totalShares?: number;
@@ -11,19 +12,88 @@ interface TickerProps {
   sellProceeds?: number;
   cashIncome?: number;
   dividendIncome?: number;
+  withheldTax?: number;
+  lastDividendPayment?: number | null;
   avgPurchasePrice?: number | null;
   earliestPurchaseDate?: string | null;
+  closedDate?: string | null;
   activeInvestmentYears?: number | null;
+  realizedPnL?: number;
+  rating?: number | null;
+  absoluteRating?: number | null;
+  stockType?: 'income' | 'growth' | 'balanced' | null;
 }
 
-const LABEL_STYLE: React.CSSProperties = {
-  fontSize: "0.7rem",
-  color: "#6b7280",
+// Round to 2 dp first, then add 0 to flush -0 and tiny negatives that display as -0.00
+const fmt$ = (val: number) =>
+  (+val.toFixed(2) + 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fmtPct = (val: number) =>
+  `${val >= 0 ? "+" : ""}${val.toFixed(2)}%`;
+
+const fmtGain$ = (val: number) =>
+  `${val >= 0 ? "+" : "-"}$${fmt$(Math.abs(val))}`;
+
+const gainColor = (val: number) =>
+  val >= 0 ? "var(--success-green)" : "var(--danger-red, #f87171)";
+
+const COL_STYLE: React.CSSProperties = {
+  width: "25%",
+  display: "flex",
+  flexDirection: "column",
+  gap: "5px",
 };
+
+const HEADER_STYLE: React.CSSProperties = {
+  fontSize: "0.625rem",
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  color: "rgba(148, 163, 184, 0.55)",
+  paddingBottom: "6px",
+  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+  marginBottom: "2px",
+};
+
+const LABEL_STYLE: React.CSSProperties = {
+  fontSize: "0.8125rem",
+  color: "var(--text-secondary)",
+  whiteSpace: "nowrap",
+};
+
+const VALUE_STYLE: React.CSSProperties = {
+  fontSize: "0.8125rem",
+  fontWeight: 600,
+  color: "var(--text-primary)",
+  textAlign: "right",
+};
+
+const DIVIDER_STYLE: React.CSSProperties = {
+  borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+  marginTop: "6px",
+  paddingTop: "8px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "5px",
+};
+
+function ColHeader({ title }: { title: string }) {
+  return <div style={HEADER_STYLE}>{title}</div>;
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "16px" }}>
+      <span style={LABEL_STYLE}>{label}</span>
+      <span>{children}</span>
+    </div>
+  );
+}
 
 const Ticker = ({
   symbol,
   name,
+  description,
   price,
   isLive = false,
   totalShares = 0,
@@ -32,12 +102,20 @@ const Ticker = ({
   sellProceeds = 0,
   cashIncome = 0,
   dividendIncome = 0,
+  withheldTax = 0,
+  lastDividendPayment = null,
   avgPurchasePrice = null,
   earliestPurchaseDate = null,
+  closedDate = null,
   activeInvestmentYears = null,
+  realizedPnL = undefined,
+  rating = null,
+  absoluteRating = null,
+  stockType = null,
 }: TickerProps) => {
+  const [showDesc, setShowDesc] = useState(false);
   const netInvested = totalInvested - sellProceeds;
-  const totalGainDollars = marketValue + cashIncome - netInvested;
+  const totalGainDollars = marketValue + cashIncome - withheldTax - netInvested;
   const totalReturn =
     totalInvested > 0 ? (totalGainDollars / totalInvested) * 100 : null;
 
@@ -80,280 +158,244 @@ const Ticker = ({
       ? dividendReturnPct / yearsHeld
       : null;
 
+  const hasAnnualized = avgAnnualReturn !== null && effectiveYears !== null;
+
+  const monthsHeld = earliestPurchaseDate
+    ? (() => {
+        const start = new Date(earliestPurchaseDate);
+        const end = closedDate ? new Date(closedDate + "T12:00:00") : new Date();
+        return Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth());
+      })()
+    : null;
+
+  const avgMonthlyCashIncome = monthsHeld !== null && cashIncome > 0 ? cashIncome / monthsHeld : null;
+  const avgMonthlyDividendIncome = monthsHeld !== null && dividendIncome > 0 ? dividendIncome / monthsHeld : null;
+
   return (
-    <div
-      className="glass-card"
-      style={{ display: "flex", flexDirection: "row" }}
-    >
-      <div style={{ width: "33.333%" }} className="flex flex-col gap-0.5">
-        <h1 className="text-3xl font-bold leading-tight">{symbol}</h1>
-        <p className="text-text-secondary text-sm">{name ?? "Stock Tracker"}</p>
-        <p style={{ ...LABEL_STYLE, marginTop: "4px" }}>Current Price</p>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span className="text-accent-green font-semibold text-sm">
-            $
-            {price.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
-          {isLive && (
-            <span
-              style={{
-                fontSize: "0.65rem",
-                fontWeight: 700,
-                letterSpacing: "0.05em",
-                color: "#22c55e",
-                border: "1px solid #22c55e",
-                borderRadius: "4px",
-                padding: "0 4px",
-                lineHeight: "1.4",
-              }}
-            >
-              LIVE
-            </span>
-          )}
-        </div>
-        {avgPurchasePrice !== null && (
-          <>
-            <p style={{ ...LABEL_STYLE, marginTop: "4px" }}>
-              Avg Purchase Price
-            </p>
-            <span className="text-accent-green font-semibold text-sm">
-              $
-              {avgPurchasePrice.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
-          </>
-        )}
-        {heldDuration !== null && (
-          <>
-            <p style={{ ...LABEL_STYLE, marginTop: "4px" }}>Held</p>
-            <span
-              className="font-semibold text-sm"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {heldDuration}
-            </span>
-          </>
-        )}
-      </div>
+    <div className="glass-card" style={{ display: "flex", flexDirection: "row" }}>
 
-      <div
-        style={{ width: "33.333%" }}
-        className="flex items-center justify-center"
-      >
-        <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4">
-          <div style={LABEL_STYLE}>Market Value</div>
-          <div
-            className="font-bold font-outfit text-accent-purple"
-            style={{ fontSize: "1.875rem", lineHeight: 1 }}
-          >
-            $
-            {marketValue.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </div>
-          <div className="text-sm mt-2">
-            <span className="text-accent-blue font-semibold">
-              {totalShares.toLocaleString()}
-            </span>
-            <span className="text-white"> shares held</span>
-          </div>
-          <div className="text-sm mt-1 flex gap-1">
-            <span style={LABEL_STYLE}>Total Invested:</span>
-            <span className="font-semibold text-accent-green">
-              $
-              {totalInvested.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
-          </div>
-          {totalReturn !== null && (
-            <>
-              <div className="text-sm mt-1 flex gap-1">
-                <span style={LABEL_STYLE}>Total Gain:</span>
-                <span
-                  className="font-semibold"
-                  style={{
-                    color:
-                      totalGainDollars >= 0
-                        ? "var(--success-green)"
-                        : "var(--danger-red, #f87171)",
-                  }}
-                >
-                  {totalGainDollars >= 0 ? "+" : "-"}$
-                  {Math.abs(totalGainDollars).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div className="text-sm mt-1 flex gap-1">
-                <span style={LABEL_STYLE}>Total Return:</span>
-                <span
-                  className="font-semibold"
-                  style={{
-                    color:
-                      totalReturn >= 0
-                        ? "var(--success-green)"
-                        : "var(--danger-red, #f87171)",
-                  }}
-                >
-                  {totalReturn >= 0 ? "+" : ""}
-                  {totalReturn.toFixed(2)}%
-                </span>
-              </div>
-              {avgAnnualReturn !== null && effectiveYears !== null && (
-                <>
-                  <div className="text-sm mt-1 flex gap-1">
-                    <span style={LABEL_STYLE}>Avg Annual Return:</span>
-                    <span
-                      className="font-semibold"
-                      style={{
-                        color:
-                          avgAnnualReturn >= 0
-                            ? "var(--success-green)"
-                            : "var(--danger-red, #f87171)",
-                      }}
-                    >
-                      {avgAnnualReturn >= 0 ? "+" : ""}
-                      {avgAnnualReturn.toFixed(2)}%
-                    </span>
-                    <span style={LABEL_STYLE}>
-                      (
-                      {effectiveYears < 1
-                        ? effectiveYears.toFixed(2)
-                        : effectiveYears}{" "}
-                      yr{effectiveYears !== 1 ? "s" : ""})
-                    </span>
-                  </div>
-                  <div className="text-sm mt-1 flex gap-1">
-                    <span style={LABEL_STYLE}>Avg Annual Gain:</span>
-                    <span
-                      className="font-semibold"
-                      style={{
-                        color:
-                          totalGainDollars >= 0
-                            ? "var(--success-green)"
-                            : "var(--danger-red, #f87171)",
-                      }}
-                    >
-                      {totalGainDollars >= 0 ? "+" : "-"}$
-                      {Math.abs(
-                        totalGainDollars / effectiveYears,
-                      ).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                  <div className="text-sm mt-1 flex gap-1">
-                    <span style={LABEL_STYLE}>Avg Monthly Gain:</span>
-                    <span
-                      className="font-semibold"
-                      style={{
-                        color:
-                          totalGainDollars >= 0
-                            ? "var(--success-green)"
-                            : "var(--danger-red, #f87171)",
-                      }}
-                    >
-                      {totalGainDollars >= 0 ? "+" : "-"}$
-                      {Math.abs(
-                        totalGainDollars / effectiveYears / 12,
-                      ).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {cashIncome > 0 && (
-        <div
-          style={{ width: "33.333%" }}
-          className="flex items-center justify-end"
-        >
-          <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4">
-            <div style={LABEL_STYLE}>Cash Income</div>
+      {/* ── Column 1: Identity ── */}
+      <div style={{ ...COL_STYLE, paddingRight: "1.5rem", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ marginBottom: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div
-              className="font-bold font-outfit text-accent-green"
-              style={{ fontSize: "1.875rem", lineHeight: 1 }}
+              style={{ position: "relative", display: "inline-block" }}
+              onMouseEnter={() => description && setShowDesc(true)}
+              onMouseLeave={() => setShowDesc(false)}
             >
-              $
-              {cashIncome.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              <h1 style={{ lineHeight: 1.1, cursor: description ? "help" : undefined }}>{symbol}</h1>
+              {showDesc && description && (
+                <div style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  left: 0,
+                  zIndex: 100,
+                  background: "var(--card-bg)",
+                  border: "1px solid var(--card-border)",
+                  borderRadius: "8px",
+                  padding: "10px 14px",
+                  width: "340px",
+                  maxHeight: "180px",
+                  overflowY: "auto",
+                  fontSize: "0.75rem",
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.6,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                  pointerEvents: "none",
+                }}>
+                  {description}
+                </div>
+              )}
             </div>
+            {isLive && (
+              <span
+                style={{
+                  fontSize: "0.6rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  color: "#22c55e",
+                  border: "1px solid #22c55e",
+                  borderRadius: "4px",
+                  padding: "0 4px",
+                  lineHeight: "1.4",
+                }}
+              >
+                LIVE
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+            {name ?? "Stock Tracker"}
+          </p>
+        </div>
+        <ColHeader title="Market" />
+        <Row label="Current Price">
+          <span style={VALUE_STYLE}>${fmt$(price)}</span>
+        </Row>
+        {avgPurchasePrice !== null && (
+          <Row label="Avg Purchase Price">
+            <span style={VALUE_STYLE}>${fmt$(avgPurchasePrice)}</span>
+          </Row>
+        )}
+        {rating !== null && (
+          <Row label="Rating">
+            <span style={{
+              ...VALUE_STYLE,
+              color: rating >= 7 ? "var(--success-green)" : rating >= 4 ? "#f59e0b" : "var(--danger-red, #f87171)",
+            }}>
+              {rating.toFixed(1)} / 10
+            </span>
+          </Row>
+        )}
+        {absoluteRating !== null && (
+          <Row label={`Abs. Score${stockType ? ` (${stockType})` : ""}`}>
+            <span style={{
+              ...VALUE_STYLE,
+              color: absoluteRating >= 7 ? "var(--success-green)" : absoluteRating >= 4 ? "#f59e0b" : "var(--danger-red, #f87171)",
+            }}>
+              {absoluteRating.toFixed(1)} / 10
+            </span>
+          </Row>
+        )}
+        {closedDate && (
+          <Row label="Closed">
+            <span style={{ ...VALUE_STYLE, color: "var(--text-secondary)" }}>
+              {new Date(closedDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </span>
+          </Row>
+        )}
+      </div>
+
+      {/* ── Column 2: Position ── */}
+      <div style={{ ...COL_STYLE, padding: "0 1.5rem", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+        <ColHeader title="Position" />
+        <Row label="Shares Held">
+          <span style={VALUE_STYLE}>{totalShares > 0 ? totalShares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}</span>
+        </Row>
+        <Row label="Market Value">
+          <span style={{ ...VALUE_STYLE, color: "var(--primary-purple)" }}>${fmt$(marketValue)}</span>
+        </Row>
+        {heldDuration !== null && (
+          <Row label="Held">
+            <span style={VALUE_STYLE}>{heldDuration}</span>
+          </Row>
+        )}
+      </div>
+
+      {/* ── Column 3: Performance ── */}
+      <div style={{ ...COL_STYLE, padding: "0 1.5rem", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+        <ColHeader title="Performance" />
+        <Row label="Total Invested">
+          <span style={VALUE_STYLE}>${fmt$(totalInvested)}</span>
+        </Row>
+        {totalReturn !== null && (
+          <>
+            <Row label="Total Gain">
+              <span style={{ ...VALUE_STYLE, color: gainColor(totalGainDollars) }}>
+                {fmtGain$(totalGainDollars)}
+              </span>
+            </Row>
+            {realizedPnL !== undefined && realizedPnL !== 0 && (
+              <Row label="Realized P/L">
+                <span style={{ ...VALUE_STYLE, color: gainColor(realizedPnL) }}>
+                  {fmtGain$(realizedPnL)}
+                </span>
+              </Row>
+            )}
+            <Row label="Total Return">
+              <span style={{ ...VALUE_STYLE, color: gainColor(totalReturn) }}>
+                {fmtPct(totalReturn)}
+              </span>
+            </Row>
+            {hasAnnualized && (
+              <div style={DIVIDER_STYLE}>
+                <Row label="Avg Annual Return">
+                  <span style={{ ...VALUE_STYLE, color: gainColor(avgAnnualReturn!) }}>
+                    {fmtPct(avgAnnualReturn!)}
+                  </span>
+                </Row>
+                {effectiveAnnualReturn !== null && (
+                  <Row label="Effective Annual Return">
+                    <span style={{ ...VALUE_STYLE, color: gainColor(effectiveAnnualReturn) }}>
+                      {fmtPct(effectiveAnnualReturn)}
+                    </span>
+                  </Row>
+                )}
+                <Row label="Avg Annual Gain">
+                  <span style={{ ...VALUE_STYLE, color: gainColor(totalGainDollars) }}>
+                    {fmtGain$(totalGainDollars / effectiveYears!)}
+                  </span>
+                </Row>
+                <Row label="Avg Monthly Gain">
+                  <span style={{ ...VALUE_STYLE, color: gainColor(totalGainDollars) }}>
+                    {fmtGain$(totalGainDollars / effectiveYears! / 12)}
+                  </span>
+                </Row>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Column 4: Income ── */}
+      <div style={{ ...COL_STYLE, paddingLeft: "1.5rem" }}>
+        <ColHeader title="Income" />
+        {cashIncome > 0 || dividendIncome > 0 || withheldTax > 0 ? (
+          <>
+            {cashIncome > 0 && (
+              <>
+                <Row label="SLIP Income (Total)">
+                  <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(cashIncome)}</span>
+                </Row>
+                {avgMonthlyCashIncome !== null && (
+                  <Row label="SLIP Income (Avg/mo)">
+                    <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(avgMonthlyCashIncome)}</span>
+                  </Row>
+                )}
+              </>
+            )}
             {dividendIncome > 0 && (
               <>
-                <div style={{ ...LABEL_STYLE, marginTop: "4px" }}>
-                  Dividend Income
-                </div>
-                <div
-                  className="text-sm font-semibold"
-                  style={{ color: "var(--accent-green)" }}
-                >
-                  $
-                  {dividendIncome.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </div>
+                <Row label={withheldTax > 0 ? "Gross Div. Income (Total)" : "Dividend Income (Total)"}>
+                  <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(dividendIncome)}</span>
+                </Row>
+                {avgMonthlyDividendIncome !== null && (
+                  <Row label="Dividend Income (Avg/mo)">
+                    <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(avgMonthlyDividendIncome)}</span>
+                  </Row>
+                )}
+                {lastDividendPayment !== null && lastDividendPayment > 0 && (
+                  <Row label="Last Dividend Payment">
+                    <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(lastDividendPayment)}</span>
+                  </Row>
+                )}
               </>
+            )}
+            {withheldTax > 0 && (
+              <Row label="Tax Withheld (DTAX)">
+                <span style={{ ...VALUE_STYLE, color: "var(--danger-red, #f87171)" }}>-${fmt$(withheldTax)}</span>
+              </Row>
+            )}
+            {withheldTax > 0 && dividendIncome > 0 && (
+              <Row label="Net Dividend Income">
+                <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(dividendIncome - withheldTax)}</span>
+              </Row>
             )}
             {dividendReturnPct !== null && (
-              <>
-                <div style={{ ...LABEL_STYLE, marginTop: "4px" }}>
-                  Dividend % Gain
-                </div>
-                <div
-                  className="text-sm font-semibold"
-                  style={{
-                    color:
-                      dividendReturnPct >= 0
-                        ? "var(--accent-green)"
-                        : "var(--error-red, #f87171)",
-                  }}
-                >
-                  {dividendReturnPct >= 0 ? "+" : ""}
-                  {dividendReturnPct.toFixed(2)}%
-                </div>
-              </>
+              <Row label="Dividend % Gain">
+                <span style={{ ...VALUE_STYLE, color: gainColor(dividendReturnPct) }}>
+                  {fmtPct(dividendReturnPct)}
+                </span>
+              </Row>
             )}
-            {effectiveAnnualReturn !== null && (
-              <>
-                <div style={{ ...LABEL_STYLE, marginTop: "4px" }}>
-                  Effective Annual Return
-                </div>
-                <div
-                  className="text-sm font-semibold"
-                  style={{
-                    color:
-                      effectiveAnnualReturn >= 0
-                        ? "var(--accent-green)"
-                        : "var(--error-red, #f87171)",
-                  }}
-                >
-                  {effectiveAnnualReturn >= 0 ? "+" : ""}
-                  {effectiveAnnualReturn.toFixed(2)}%
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+          </>
+        ) : (
+          <p style={{ fontSize: "0.75rem", color: "rgba(148, 163, 184, 0.4)", fontStyle: "italic" }}>
+            No income data
+          </p>
+        )}
+      </div>
+
     </div>
   );
 };

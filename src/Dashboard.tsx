@@ -1,19 +1,21 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Ticker from "./components/Ticker";
 import TransactionForm from "./components/TransactionForm";
 import HistoryTable from "./components/HistoryTable";
 import ProjectionView from "./components/ProjectionView";
 import StockNavigator from "./components/StockNavigator";
 import AddStockModal from "./components/AddStockModal";
+import FilterBar from "./components/FilterBar";
 import {
   Plus,
   History,
   BarChart3,
   ChevronDown,
   ChevronUp,
-  SlidersHorizontal,
   TrendingDown,
 } from "lucide-react";
+
+const PRICE_TTL = 5 * 60 * 1000; // 5 minutes
 import {
   AreaChart,
   Area,
@@ -30,7 +32,7 @@ import {
   Legend,
 } from "recharts";
 import { format, parse, startOfMonth } from "date-fns";
-import type { Transaction, Stock, StockSummary } from "./types";
+import { matchesValueFilter, type Transaction, type Stock, type StockSummary, type FilterValue, type ProjectionSettings } from "./types";
 
 interface HistoricalDataPoint {
   timestamp: number; // Unix ms — numeric XAxis dataKey
@@ -39,28 +41,34 @@ interface HistoricalDataPoint {
   cost: number;
   qty: number;
   dividendValue: number;
-  lastDividendAmount: number; // most recent single dividend payment up to this point
+  lastDividendAmount: number | null; // most recent single dividend payment; null before first dividend
 }
 
 interface DashboardProps {
   onBack: (message?: string) => void;
+  initialTicker?: string;
+  filterStatus: "all" | "active" | "inactive";
+  onFilterStatusChange: (v: "all" | "active" | "inactive") => void;
+  filterValue: FilterValue;
+  onFilterValueChange: (v: FilterValue) => void;
+  filterDividends: "all" | "yes" | "no";
+  onFilterDividendsChange: (v: "all" | "yes" | "no") => void;
+  stocks: Stock[];
+  onStocksChange: React.Dispatch<React.SetStateAction<Stock[]>>;
+  summaries: Record<string, StockSummary>;
+  portfolioLoaded: boolean;
+  lookedUpTickers: React.RefObject<Set<string>>;
+  transactionCache: Record<string, Transaction[]>;
+  onTransactionCacheChange: React.Dispatch<React.SetStateAction<Record<string, Transaction[]>>>;
+  priceCache: Record<string, { price: number; fetchedAt: number }>;
+  onPriceCacheChange: React.Dispatch<React.SetStateAction<Record<string, { price: number; fetchedAt: number }>>>;
+  projectionSettingsCache: Record<string, ProjectionSettings>;
+  onProjectionSettingsCacheChange: React.Dispatch<React.SetStateAction<Record<string, ProjectionSettings>>>;
 }
 
-const Dashboard = ({ onBack }: DashboardProps) => {
-  const [stocks, setStocks] = useState<Stock[]>([]);
-  const [stocksLoaded, setStocksLoaded] = useState(false);
+const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, filterValue, onFilterValueChange, filterDividends, onFilterDividendsChange, stocks, onStocksChange, summaries, portfolioLoaded, lookedUpTickers, transactionCache, onTransactionCacheChange, priceCache, onPriceCacheChange, projectionSettingsCache, onProjectionSettingsCacheChange }: DashboardProps) => {
   const [currentStockIndex, setCurrentStockIndex] = useState<number>(0);
-  const [stockSummaries, setStockSummaries] = useState<
-    Record<string, StockSummary>
-  >({});
-  const [summariesLoaded, setSummariesLoaded] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<
-    "all" | "active" | "inactive"
-  >("active");
-  const [filterMinValue, setFilterMinValue] = useState<number>(1000);
-  const [filterDividends, setFilterDividends] = useState<"all" | "yes" | "no">(
-    "all",
-  );
+  const navigatedViaHash = useRef(false);
   const [showAddStockModal, setShowAddStockModal] = useState<boolean>(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [livePrice, setLivePrice] = useState<number | null>(null);
@@ -69,16 +77,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     (t) => t.type === "purchase" || t.type === "BUY",
   );
   const sells = transactions.filter((t) => t.type === "SELL");
-  const cashIncome = transactions.filter(
+  const slipTransactions = transactions.filter((t) => t.type === "SLIP");
+  const dividendTransactions = transactions.filter(
     (t) =>
       t.type === "dividend" ||
       t.type === "MDIV" ||
       t.type === "CDIV" ||
-      t.type === "SLIP",
+      t.type === "RETURN_OF_CAPITAL",
   );
-  const dividendTransactions = transactions.filter(
-    (t) => t.type === "dividend" || t.type === "MDIV" || t.type === "CDIV",
-  );
+  const dtaxTransactions = transactions.filter((t) => t.type === "DTAX");
 
   const totalShares = useMemo(() => {
     const sorted = [...transactions].sort(
@@ -86,8 +93,10 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     );
     let qty = 0;
     for (const t of sorted) {
-      if (t.type === "BUY" || t.type === "purchase") qty += t.quantity;
-      else if (t.type === "SELL") qty -= t.quantity;
+      if (t.type === "BUY" || t.type === "purchase" || t.type === "REC"
+          || t.type === "SHARE_EXCHANGE" || t.type === "MRGS_MERGER" || t.type === "SPINOFF")
+        qty += t.quantity;
+      else if (t.type === "SELL" || t.type === "SHARE_EXCHANGE_OUT") qty -= t.quantity;
       else if (t.type === "SPLIT") qty *= t.quantity;
     }
     return qty;
@@ -111,51 +120,44 @@ const Dashboard = ({ onBack }: DashboardProps) => {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:5001/api/stocks")
-      .then((res) => res.json())
-      .then((data: Stock[]) => {
-        if (data.length === 0) {
-          onBack("No ticker data found. Please import data first.");
-          return;
-        }
-        setStocks(data);
-        setStocksLoaded(true);
-        const hash = window.location.hash.slice(1).toUpperCase();
-        if (hash) {
-          const idx = data.findIndex(
-            (s: Stock) => s.ticker.toUpperCase() === hash,
-          );
-          if (idx !== -1) setCurrentStockIndex(idx);
-        }
-        // Auto-update any stocks whose name is still just the ticker symbol
-        data.filter(s => s.name === s.ticker).forEach(async (stock) => {
-          try {
-            const res = await fetch(`http://localhost:5001/api/lookup/${stock.ticker}`);
-            if (!res.ok) return;
-            const { name } = await res.json() as { name: string };
-            if (name && name !== stock.ticker) {
-              setStocks(prev => prev.map(s => s.ticker === stock.ticker ? { ...s, name } : s));
-              fetch(`http://localhost:5001/api/stocks/${stock.ticker}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
-              }).catch(() => {});
-            }
-          } catch { /* ignore */ }
-        });
-      })
-      .catch((err) => console.error("Error fetching stocks:", err));
-  }, []);
-
-  useEffect(() => {
-    fetch("http://localhost:5001/api/stocks/summary")
-      .then((res) => res.json())
-      .then((data: Record<string, StockSummary>) => {
-        setStockSummaries(data);
-        setSummariesLoaded(true);
-      })
-      .catch((err) => console.error("Error fetching stock summaries:", err));
-  }, []);
+    if (!portfolioLoaded) return;
+    if (stocks.length === 0) {
+      onBack("No ticker data found. Please import data first.");
+      return;
+    }
+    // Handle navigation from homepage — prefer explicit prop, fall back to hash
+    const target = (initialTicker ?? window.location.hash.slice(1)).toUpperCase();
+    if (target) {
+      const idx = stocks.findIndex((s: Stock) => s.ticker.toUpperCase() === target);
+      if (idx !== -1) {
+        setCurrentStockIndex(idx);
+        navigatedViaHash.current = true;
+      }
+    }
+    // Auto-update name (if still the ticker symbol) and description (if missing).
+    // Guard with lookedUpTickers so this fires at most once per ticker per session,
+    // regardless of how many times the Dashboard mounts.
+    stocks
+      .filter(s => (s.name === s.ticker || !s.description) && !lookedUpTickers.current?.has(s.ticker))
+      .forEach(async (stock) => {
+        lookedUpTickers.current?.add(stock.ticker);
+        try {
+          const res = await fetch(`http://localhost:5001/api/lookup/${stock.ticker}`);
+          if (!res.ok) return;
+          const { name, description } = await res.json() as { name: string; description?: string };
+          const updates: { name?: string; description?: string } = {};
+          if (name && name !== stock.ticker && stock.name === stock.ticker) updates.name = name;
+          if (description && !stock.description) updates.description = description;
+          if (Object.keys(updates).length === 0) return;
+          onStocksChange((prev: Stock[]) => prev.map(s => s.ticker === stock.ticker ? { ...s, ...updates } : s));
+          fetch(`http://localhost:5001/api/stocks/${stock.ticker}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updates),
+          }).catch(() => {});
+        } catch { /* ignore */ }
+      });
+  }, [portfolioLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (currentTicker) {
@@ -165,23 +167,36 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
   useEffect(() => {
     if (!currentTicker) return;
+    const cached = transactionCache[currentTicker];
+    if (cached) { setTransactions(cached); return; }
     setTransactions([]);
     fetch(`http://localhost:5001/api/transactions?ticker=${currentTicker}`)
       .then((res) => res.json())
-      .then((data: Transaction[]) => setTransactions(data))
+      .then((data: Transaction[]) => {
+        setTransactions(data);
+        onTransactionCacheChange(prev => ({ ...prev, [currentTicker]: data }));
+      })
       .catch((err) => console.error("Error fetching transactions:", err));
-  }, [currentTicker]);
+  }, [currentTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!currentTicker) return;
+    const cached = priceCache[currentTicker];
+    if (cached && Date.now() - cached.fetchedAt < PRICE_TTL) {
+      setLivePrice(cached.price);
+      return;
+    }
     setLivePrice(null);
     fetch(`http://localhost:5001/api/price/${currentTicker}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-      .then((data: { price: number }) => setLivePrice(data.price))
+      .then((data: { price: number }) => {
+        setLivePrice(data.price);
+        onPriceCacheChange(prev => ({ ...prev, [currentTicker]: { price: data.price, fetchedAt: Date.now() } }));
+      })
       .catch((err) =>
         console.warn(`Live price unavailable for ${currentTicker}:`, err),
       );
-  }, [currentTicker]);
+  }, [currentTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTransaction = async (t: Omit<Transaction, "id">): Promise<void> => {
     try {
@@ -192,11 +207,13 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       });
       if (res.ok) {
         const saved: Transaction = await res.json();
-        setTransactions((prev) =>
-          [...prev, saved].sort(
+        setTransactions((prev) => {
+          const updated = [...prev, saved].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-          ),
-        );
+          );
+          onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: updated }));
+          return updated;
+        });
       }
     } catch (err) {
       console.error("Error saving transaction:", err);
@@ -218,12 +235,17 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         body: JSON.stringify(tagged),
       });
       if (res.ok) {
-        const saved: Transaction[] = await res.json();
-        setTransactions((prev) =>
-          [...prev, ...saved].sort(
+        const { inserted: saved, skipped }: { inserted: Transaction[]; skipped: number } = await res.json();
+        setTransactions((prev) => {
+          const updated = [...prev, ...saved].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-          ),
-        );
+          );
+          onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: updated }));
+          return updated;
+        });
+        if (skipped > 0) {
+          alert(`${skipped} duplicate transaction${skipped !== 1 ? "s were" : " was"} skipped (already exist in the database).`);
+        }
       }
     } catch (err) {
       console.error("Error importing transactions:", err);
@@ -242,7 +264,10 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         `http://localhost:5001/api/transactions?ticker=${currentTicker}`,
         { method: "DELETE" },
       );
-      if (res.ok) setTransactions([]);
+      if (res.ok) {
+        setTransactions([]);
+        onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: [] }));
+      }
     } catch (err) {
       console.error("Error deleting all transactions:", err);
     }
@@ -254,7 +279,11 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         method: "DELETE",
       });
       if (res.ok) {
-        setTransactions((prev) => prev.filter((t) => t.id !== id));
+        setTransactions((prev) => {
+          const updated = prev.filter((t) => t.id !== id);
+          onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: updated }));
+          return updated;
+        });
       }
     } catch (err) {
       console.error("Error deleting entry:", err);
@@ -279,7 +308,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       });
       if (res.ok) {
         const saved: Stock = await res.json();
-        setStocks((prev) => {
+        onStocksChange((prev: Stock[]) => {
           const updated = [...prev, saved];
           setCurrentStockIndex(updated.length - 1);
           return updated;
@@ -307,7 +336,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         { method: "DELETE" },
       );
       if (res.ok) {
-        setStocks((prev) => {
+        onStocksChange((prev: Stock[]) => {
           const updated = prev.filter((s) => s.ticker !== currentTicker);
           setCurrentStockIndex((i) =>
             Math.max(0, Math.min(i, updated.length - 1)),
@@ -315,6 +344,9 @@ const Dashboard = ({ onBack }: DashboardProps) => {
           return updated;
         });
         setTransactions([]);
+        onTransactionCacheChange(cache => { const next = { ...cache }; delete next[currentTicker]; return next; });
+        onPriceCacheChange(cache => { const next = { ...cache }; delete next[currentTicker]; return next; });
+        onProjectionSettingsCacheChange(cache => { const next = { ...cache }; delete next[currentTicker]; return next; });
       }
     } catch (err) {
       console.error("Error removing stock:", err);
@@ -322,15 +354,14 @@ const Dashboard = ({ onBack }: DashboardProps) => {
   };
 
   const filteredStocks = useMemo(() => {
-    if (!summariesLoaded) return stocks;
+    if (!portfolioLoaded) return stocks;
     return stocks
       .filter((s) => {
-        const summary = stockSummaries[s.ticker];
+        const summary = summaries[s.ticker];
         const isActive = summary && summary.totalShares > 0;
         if (filterStatus === "active" && !isActive) return false;
         if (filterStatus === "inactive" && isActive) return false;
-        if (isActive && filterMinValue > 0 && (summary?.marketValue ?? 0) < filterMinValue)
-          return false;
+        if (!matchesValueFilter(summary?.marketValue ?? 0, filterValue)) return false;
         if (filterDividends === "yes" && !summary?.hasDividends) return false;
         if (filterDividends === "no" && summary?.hasDividends) return false;
         return true;
@@ -338,10 +369,10 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       .sort((a, b) => a.ticker.localeCompare(b.ticker));
   }, [
     stocks,
-    stockSummaries,
-    summariesLoaded,
+    summaries,
+    portfolioLoaded,
     filterStatus,
-    filterMinValue,
+    filterValue,
     filterDividends,
   ]);
 
@@ -349,11 +380,16 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     (s) => s.ticker === currentTicker,
   );
 
-  // If active filters push current stock out of view, jump to first visible stock
+  // If active filters push current stock out of view, jump to first visible stock.
+  // Skip the reset once when the stock was set by hash navigation (homepage link).
   useEffect(() => {
     if (filteredStocks.length === 0) return;
     const ticker = stocks[currentStockIndex]?.ticker;
     if (!filteredStocks.some((s) => s.ticker === ticker)) {
+      if (navigatedViaHash.current) {
+        navigatedViaHash.current = false;
+        return;
+      }
       setCurrentStockIndex(
         stocks.findIndex((s) => s.ticker === filteredStocks[0].ticker),
       );
@@ -379,6 +415,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
   };
 
   const getHistoricalData = (): HistoricalDataPoint[] => {
+    // Independent dividend payment history: date → total paid that day.
+    // Completely separate from all other calculations.
+    const dividendByDay = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type === "dividend" || t.type === "MDIV" || t.type === "CDIV" || t.type === "RETURN_OF_CAPITAL") {
+        dividendByDay.set(t.date, (dividendByDay.get(t.date) ?? 0) + t.price * t.quantity);
+      }
+    }
+
     const dayMap = new Map<
       string,
       {
@@ -397,20 +442,19 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     for (const t of sorted) {
       const dayKey = t.date;
       const existing = dayMap.get(dayKey);
-      const isBuy = t.type === "BUY" || t.type === "purchase";
+      const isBuy = t.type === "BUY" || t.type === "purchase" || t.type === "REC";
       const isSell = t.type === "SELL";
       const isCashIncome =
         t.type === "dividend" ||
         t.type === "MDIV" ||
         t.type === "CDIV" ||
-        t.type === "SLIP";
+        t.type === "RETURN_OF_CAPITAL";
       const isSplit = t.type === "SPLIT";
       const qtyDelta = isBuy ? t.quantity : isSell ? -t.quantity : 0;
       if (existing) {
         existing.qty += qtyDelta;
-        if (isCashIncome) {
-          existing.dividendCost += t.price * t.quantity;
-        } else if (isBuy) {
+        if (isCashIncome) existing.dividendCost += t.price * t.quantity;
+        if (isBuy) {
           existing.cost += t.price * t.quantity;
           existing.lastPrice = t.price;
         } else if (isSplit) {
@@ -433,7 +477,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     let runningCost = 0;
     let runningDividendValue = 0;
     let lastKnownPrice = 0;
-    let lastDividendAmount = 0;
+    let lastDividendAmount: number | null = null;
     const result: HistoricalDataPoint[] = [];
 
     for (const dayKey of sortedDayKeys) {
@@ -441,14 +485,14 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       runningQty += data.qty;
       runningCost += data.cost;
       runningDividendValue += data.dividendCost;
-      // Apply split: multiply shares, divide price so value stays flat
       if (data.splitRatio) {
         runningQty *= data.splitRatio;
         if (lastKnownPrice > 0) lastKnownPrice /= data.splitRatio;
       }
       if (data.lastPrice > 0) lastKnownPrice = data.lastPrice;
-      if (data.dividendCost > 0)
-        lastDividendAmount = +data.dividendCost.toFixed(2);
+      // Last dividend: read directly from the independent dividend history map
+      const divPaidToday = dividendByDay.get(dayKey);
+      if (divPaidToday) lastDividendAmount = +divPaidToday.toFixed(2);
       const parsedDate = parse(dayKey, "yyyy-MM-dd", new Date());
       result.push({
         timestamp: parsedDate.getTime(),
@@ -514,6 +558,9 @@ const Dashboard = ({ onBack }: DashboardProps) => {
   });
 
   const historicalData = getHistoricalData();
+  const lastDividendPayment = historicalData.length > 0
+    ? historicalData[historicalData.length - 1].lastDividendAmount
+    : null;
   const { data: annualGrowthData, useMonths: growthUseMonths } =
     getAnnualGrowthData();
 
@@ -536,7 +583,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       : null;
 
   const costBasisChartData = useMemo(() => {
-    const cb = stockSummaries[currentTicker]?.costBasis;
+    const cb = summaries[currentTicker]?.costBasis;
     if (!cb || Object.keys(cb.monthly).length === 0)
       return { data: [], total: 0 };
     const monthKeys = Object.keys(cb.monthly).sort();
@@ -547,7 +594,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       })),
       total: cb.total,
     };
-  }, [stockSummaries, currentTicker]);
+  }, [summaries, currentTicker]);
 
   const maxDividendValue = Math.max(
     0,
@@ -584,7 +631,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     return ticks;
   })();
 
-  if (!stocksLoaded) {
+  if (!portfolioLoaded) {
     return (
       <div
         className="dashboard-container flex items-center justify-center"
@@ -605,179 +652,38 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         onNavigate={handleNavigate}
         onAddStock={() => setShowAddStockModal(true)}
         onRemoveStock={handleRemoveStock}
+        onBack={() => onBack()}
       />
 
       {/* Filter bar */}
-      <div
-        className="glass-card"
-        style={{ padding: "10px 16px", marginBottom: "8px" }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "20px",
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <SlidersHorizontal
-              size={14}
-              style={{ color: "var(--text-secondary)", flexShrink: 0 }}
-            />
-            <span
-              style={{
-                fontSize: "12px",
-                color: "var(--text-secondary)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Status:
-            </span>
-            {(["all", "active", "inactive"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilterStatus(s)}
-                style={{
-                  padding: "3px 10px",
-                  fontSize: "12px",
-                  borderRadius: "6px",
-                  border: "1px solid",
-                  cursor: "pointer",
-                  borderColor:
-                    filterStatus === s
-                      ? "var(--primary-purple)"
-                      : "var(--card-border)",
-                  background:
-                    filterStatus === s ? "rgba(123,63,228,0.2)" : "transparent",
-                  color:
-                    filterStatus === s
-                      ? "var(--text-primary)"
-                      : "var(--text-secondary)",
-                  transition: "all 0.15s",
-                }}
-              >
-                {s === "active"
-                  ? "Active"
-                  : s === "inactive"
-                    ? "Inactive"
-                    : "All"}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span
-              style={{
-                fontSize: "12px",
-                color: "var(--text-secondary)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Min Value:
-            </span>
-            <select
-              value={filterMinValue}
-              onChange={(e) => setFilterMinValue(Number(e.target.value))}
-              style={{
-                fontSize: "12px",
-                color:
-                  filterMinValue > 0
-                    ? "var(--text-primary)"
-                    : "var(--text-secondary)",
-                background: "var(--card-bg)",
-                border: `1px solid ${filterMinValue > 0 ? "var(--primary-purple)" : "var(--card-border)"}`,
-                borderRadius: "6px",
-                padding: "3px 22px 3px 8px",
-                cursor: "pointer",
-                appearance: "none",
-                WebkitAppearance: "none",
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                backgroundRepeat: "no-repeat",
-                backgroundPosition: "right 6px center",
-              }}
-            >
-              <option value={0}>Any</option>
-              <option value={500}>$500+</option>
-              <option value={1000}>$1,000+</option>
-              <option value={5000}>$5,000+</option>
-              <option value={10000}>$10,000+</option>
-            </select>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span
-              style={{
-                fontSize: "12px",
-                color: "var(--text-secondary)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Dividends:
-            </span>
-            {(["all", "yes", "no"] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setFilterDividends(d)}
-                style={{
-                  padding: "3px 10px",
-                  fontSize: "12px",
-                  borderRadius: "6px",
-                  border: "1px solid",
-                  cursor: "pointer",
-                  borderColor:
-                    filterDividends === d
-                      ? "var(--primary-blue)"
-                      : "var(--card-border)",
-                  background:
-                    filterDividends === d
-                      ? "rgba(0,123,255,0.15)"
-                      : "transparent",
-                  color:
-                    filterDividends === d
-                      ? "var(--text-primary)"
-                      : "var(--text-secondary)",
-                  transition: "all 0.15s",
-                }}
-              >
-                {d === "yes" ? "With" : d === "no" ? "Without" : "All"}
-              </button>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginLeft: "auto",
-              fontSize: "12px",
-              color:
-                summariesLoaded &&
-                (filterStatus !== "all" ||
-                  filterMinValue > 0 ||
-                  filterDividends !== "all")
-                  ? "var(--warning-orange)"
-                  : "var(--text-secondary)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Showing {filteredStocks.length} / {stocks.length} stocks
-          </div>
-        </div>
-      </div>
+      <FilterBar
+        filterStatus={filterStatus}
+        onStatusChange={onFilterStatusChange}
+        filterValue={filterValue}
+        onValueChange={onFilterValueChange}
+        filterDividends={filterDividends}
+        onDividendsChange={onFilterDividendsChange}
+        filteredCount={filteredStocks.length}
+        totalCount={stocks.length}
+        summariesLoaded={portfolioLoaded}
+      />
 
       <header className="mb-8 mt-4">
         <Ticker
           symbol={currentTicker}
           name={currentStock?.name}
+          description={currentStock?.description}
           price={currentPrice}
           isLive={livePrice !== null}
           totalShares={totalShares}
           marketValue={totalShares * currentPrice}
-          totalInvested={purchases.reduce(
+          totalInvested={summaries[currentTicker]?.totalInvested ?? purchases.reduce(
             (sum, p) => sum + p.quantity * p.price,
             0,
           )}
           sellProceeds={sells.reduce((sum, s) => sum + s.quantity * s.price, 0)}
-          cashIncome={cashIncome.reduce(
+          realizedPnL={summaries[currentTicker]?.realizedPnL}
+          cashIncome={slipTransactions.reduce(
             (sum, t) => sum + t.quantity * t.price,
             0,
           )}
@@ -785,10 +691,14 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             (sum, t) => sum + t.quantity * t.price,
             0,
           )}
+          lastDividendPayment={lastDividendPayment}
+          withheldTax={dtaxTransactions.reduce(
+            (sum, t) => sum + t.quantity * t.price,
+            0,
+          )}
           avgPurchasePrice={
             totalShares > 0
-              ? purchases.reduce((sum, p) => sum + p.quantity * p.price, 0) /
-                totalShares
+              ? (summaries[currentTicker]?.costBasis?.total ?? null)
               : null
           }
           earliestPurchaseDate={
@@ -805,6 +715,10 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                   .size
               : null
           }
+          closedDate={summaries[currentTicker]?.closedDate ?? null}
+          rating={summaries[currentTicker]?.rating ?? null}
+          absoluteRating={summaries[currentTicker]?.absoluteRating ?? null}
+          stockType={summaries[currentTicker]?.stockType ?? null}
         />
       </header>
 
@@ -1189,6 +1103,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                             strokeWidth={2}
                             strokeDasharray="5 5"
                             name="Last Dividend"
+                            connectNulls={false}
                           />
                         </>
                       )}
@@ -1694,7 +1609,9 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             purchases={purchases}
             currentPrice={currentPrice}
             ticker={currentTicker}
-            hasDividends={cashIncome.length > 0}
+            hasDividends={dividendTransactions.length > 0 || slipTransactions.length > 0}
+            projectionSettingsCache={projectionSettingsCache}
+            onProjectionSettingsCacheChange={onProjectionSettingsCacheChange}
           />
         </main>
       </div>

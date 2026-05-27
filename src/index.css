@@ -28,8 +28,6 @@ body {
   background-color: var(--bg-color);
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
-  height: 100vh;
-  overflow: hidden;
   background-image:
     radial-gradient(circle at 20% 20%, rgba(123, 63, 228, 0.1) 0%, transparent 40%),
     radial-gradient(circle at 80% 80%, rgba(0, 123, 255, 0.1) 0%, transparent 40%);

@@ -20,8 +20,13 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
     });
 
     const isPurchaseType = (type: string) => type === 'purchase' || type === 'BUY';
+    const isReceiveType  = (type: string) => type === 'REC' || type === 'MRGS_MERGER' || type === 'SPINOFF' || type === 'SHARE_EXCHANGE';
+    const isExchangeOutType = (type: string) => type === 'SHARE_EXCHANGE_OUT';
     const isDividendType = (type: string) =>
         type === 'dividend' || type === 'MDIV' || type === 'CDIV' || type === 'SLIP';
+    const isRocType = (type: string) => type === 'RETURN_OF_CAPITAL';
+    const isFeeType = (type: string) => type === 'DFEE' || type === 'AFEE' || type === 'DTAX';
+    const isMarginType = (type: string) => type === 'MRGS' || type === 'MRGC' || type === 'MRGC_MERGER';
 
     // Build running totals chronologically, applying splits as multipliers
     const accumulatedQtyMap: Record<number, number> = {};
@@ -29,16 +34,16 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
     let runningQty = 0;
     let runningSpent = 0;
     for (const p of chronological) {
-        if (isPurchaseType(p.type)) runningQty += p.quantity;
-        else if (p.type === 'SELL') runningQty -= p.quantity;
+        if (isPurchaseType(p.type) || isReceiveType(p.type)) runningQty += p.quantity;
+        else if (p.type === 'SELL' || isExchangeOutType(p.type)) runningQty -= p.quantity;
         else if (p.type === 'SPLIT') runningQty *= p.quantity;
         accumulatedQtyMap[p.id] = runningQty;
-        if (isPurchaseType(p.type)) runningSpent += p.price * p.quantity;
+        if (isPurchaseType(p.type) || isReceiveType(p.type)) runningSpent += p.price * p.quantity;
         totalSpentMap[p.id] = runningSpent;
     }
 
-    // Use last BUY price for the Value column (avoid SPLIT rows which have price=0)
-    const buyTxs = chronological.filter(p => isPurchaseType(p.type));
+    // Use last BUY/REC price for the Value column (avoid SPLIT rows which have price=0)
+    const buyTxs = chronological.filter(p => isPurchaseType(p.type) || isReceiveType(p.type));
     const lastPrice = buyTxs.length > 0 ? buyTxs[buyTxs.length - 1].price : 0;
 
     // Collect splits to compute retroactive forward-adjustment factors
@@ -48,10 +53,10 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
             .filter(s => s.date > rowDate)
             .reduce((factor, s) => factor * s.quantity, 1);
 
-    // Monthly totals (purchases only)
+    // Monthly totals (purchases + transfers in)
     const monthlyTotals: Record<string, number> = {};
     for (const p of purchases) {
-        if (isPurchaseType(p.type)) {
+        if (isPurchaseType(p.type) || isReceiveType(p.type)) {
             const month = p.date.slice(0, 7);
             monthlyTotals[month] = (monthlyTotals[month] || 0) + p.price * p.quantity;
         }
@@ -106,7 +111,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                         >
                             Date
                         </th>
-                        <th style={{ width: '70px' }}>Type</th>
+                        <th style={{ minWidth: '140px' }}>Type</th>
                         <th>Price</th>
                         <th>Qty</th>
                         <th>Cost</th>
@@ -188,19 +193,56 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                     <td>
                                         <span
                                             className={
-                                                isDividendType(p.type) ? 'badge badge-success' :
-                                                p.type === 'SELL' ? 'badge badge-danger' :
+                                                isDividendType(p.type) || isRocType(p.type) ? 'badge badge-success' :
+                                                p.type === 'SELL' || isExchangeOutType(p.type) ? 'badge badge-danger' :
                                                 isPurchaseType(p.type) ? 'badge badge-warning' :
+                                                isReceiveType(p.type) ? 'badge' :
+                                                isFeeType(p.type) ? 'badge' :
+                                                isMarginType(p.type) ? 'badge' :
                                                 'badge badge-secondary'
                                             }
-                                            style={{ fontSize: '0.7rem', padding: '2px 8px' }}
+                                            style={
+                                                isReceiveType(p.type)
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(20,184,166,0.15)', color: '#2dd4bf', border: '1px solid rgba(20,184,166,0.4)' }
+                                                    : isExchangeOutType(p.type)
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }
+                                                    : isRocType(p.type)
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.4)', whiteSpace: 'nowrap' }
+                                                    : isFeeType(p.type)
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }
+                                                    : p.type === 'MRGS'
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }
+                                                    : p.type === 'MRGC'
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.4)' }
+                                                    : p.type === 'MRGC_MERGER'
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.4)' }
+                                                    : { fontSize: '0.7rem', padding: '2px 8px' }
+                                            }
                                         >
                                             {isDividendType(p.type)
                                                 ? (p.type === 'dividend' ? 'Dividend' : p.type)
+                                                : isRocType(p.type)
+                                                ? 'R CAP'
                                                 : p.type === 'SELL'
                                                 ? 'Sell'
+                                                : isExchangeOutType(p.type)
+                                                ? 'Exchange Out'
                                                 : isPurchaseType(p.type)
                                                 ? (p.type === 'purchase' ? 'Purchase' : p.type)
+                                                : isReceiveType(p.type)
+                                                ? (p.type === 'MRGS_MERGER' ? 'Merger Shares' : p.type === 'SPINOFF' ? 'Spin-Off' : p.type === 'SHARE_EXCHANGE' ? 'Exchange In' : 'Transfer In')
+                                                : p.type === 'DFEE'
+                                                ? 'ADR Fee'
+                                                : p.type === 'AFEE'
+                                                ? 'Admin Fee'
+                                                : p.type === 'DTAX'
+                                                ? 'Tax Withheld'
+                                                : p.type === 'MRGS'
+                                                ? 'Margin Interest'
+                                                : p.type === 'MRGC'
+                                                ? 'Margin Credit'
+                                                : p.type === 'MRGC_MERGER'
+                                                ? 'Merger Cash'
                                                 : p.type}
                                         </span>
                                     </td>
@@ -216,12 +258,12 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                         ${(p.price * p.quantity).toLocaleString(undefined, numFmt)}
                                     </td>
                                     <td className="font-bold text-accent-purple">
-                                        {p.type === 'SLIP'
+                                        {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
                                             : `$${totalSpentMap[p.id].toLocaleString(undefined, numFmt)}`}
                                     </td>
                                     <td className="font-mono">
-                                        {p.type === 'SLIP'
+                                        {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
                                             : <>
                                                 {adjShares.toLocaleString(undefined, numFmt)}
@@ -229,17 +271,17 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                               </>}
                                     </td>
                                     <td className="font-bold text-accent-blue">
-                                        {p.type === 'SLIP'
+                                        {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
                                             : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                                     </td>
-                                    <td className="font-bold" style={{ color: p.type === 'SLIP' ? undefined : glColor }}>
-                                        {p.type === 'SLIP'
+                                    <td className="font-bold" style={{ color: (p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type)) ? undefined : glColor }}>
+                                        {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
                                             : `${gainLoss >= 0 ? '+' : '-'}$${Math.abs(gainLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                                     </td>
-                                    <td style={{ color: p.type === 'SLIP' ? undefined : glColor }}>
-                                        {p.type === 'SLIP'
+                                    <td style={{ color: (p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type)) ? undefined : glColor }}>
+                                        {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
                                             ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
                                             : `${gainLoss >= 0 ? '+' : ''}${gainLossPct.toFixed(1)}%`}
                                     </td>

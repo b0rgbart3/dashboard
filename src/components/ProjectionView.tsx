@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BarChart3, PieChart, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, addMonths, startOfMonth } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { Transaction, ProjectionSettings } from '../types';
+import type { Dispatch, SetStateAction } from 'react';
 
 interface ProjectionViewProps {
     purchases: Transaction[];
     currentPrice: number;
     ticker: string;
     hasDividends: boolean;
+    projectionSettingsCache: Record<string, ProjectionSettings>;
+    onProjectionSettingsCacheChange: Dispatch<SetStateAction<Record<string, ProjectionSettings>>>;
 }
 
 interface ProjectionDataPoint {
@@ -24,7 +27,7 @@ interface ProjectionDataPoint {
     type: 'Actual' | 'Projected';
 }
 
-const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps) => {
+const ProjectionView = ({ purchases, ticker, hasDividends, projectionSettingsCache, onProjectionSettingsCacheChange }: ProjectionViewProps) => {
     const [projectedMonthlyStack, setProjectedMonthlyStack] = useState<string>('200');
     const [decayMonths, setDecayMonths] = useState<string>('20');
     const [projectedCost, setProjectedCost] = useState<string>('100');
@@ -38,53 +41,68 @@ const ProjectionView = ({ purchases, ticker, hasDividends }: ProjectionViewProps
     const [graphOpen, setGraphOpen] = useState<boolean>(false);
     const [showHistory, setShowHistory] = useState<boolean>(false);
     const [chartMounted, setChartMounted] = useState(false);
+    // Prevents the save effect from treating a load as a user edit
+    const isLoadingSettings = useRef(false);
 
     useEffect(() => { setChartMounted(true); }, []);
 
-    // Load saved settings when ticker changes
+    const applySettings = (settings: ProjectionSettings) => {
+        isLoadingSettings.current = true;
+        setProjectedMonthlyStack(settings.monthlyStack);
+        setDecayMonths(settings.decayMonths);
+        setProjectedCost(settings.stockPrice);
+        setDividendInput(settings.dividendInput);
+        setTaperDate(settings.taperDate);
+        setTaperLength(settings.taperLength);
+        setTargetIncome(settings.targetIncome);
+        setProjectionLength(settings.projectionLength);
+        setUseTaper(settings.useTaper);
+    };
+
+    // Load saved settings when ticker changes — serve from cache when available
     useEffect(() => {
         if (!ticker) return;
+        const cached = projectionSettingsCache[ticker];
+        if (cached) { applySettings(cached); return; }
         fetch(`http://localhost:5001/api/projection-settings/${ticker}`)
             .then(res => res.json())
             .then((settings: ProjectionSettings) => {
                 if (settings && Object.keys(settings).length > 0) {
-                    setProjectedMonthlyStack(settings.monthlyStack);
-                    setDecayMonths(settings.decayMonths);
-                    setProjectedCost(settings.stockPrice);
-                    setDividendInput(settings.dividendInput);
-                    setTaperDate(settings.taperDate);
-                    setTaperLength(settings.taperLength);
-                    setTargetIncome(settings.targetIncome);
-                    setProjectionLength(settings.projectionLength);
-                    setUseTaper(settings.useTaper);
+                    applySettings(settings);
+                    onProjectionSettingsCacheChange(prev => ({ ...prev, [ticker]: settings }));
                 }
             })
             .catch(err => console.error('Error loading projection settings:', err));
-    }, [ticker]);
+    }, [ticker]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Debounced save whenever settings change
+    // Debounced save whenever settings change — skip if the change came from a load, not a user edit
     useEffect(() => {
         if (!ticker) return;
+        if (isLoadingSettings.current) { isLoadingSettings.current = false; return; }
+        const settings: ProjectionSettings = {
+            monthlyStack: projectedMonthlyStack,
+            decayMonths,
+            stockPrice: projectedCost,
+            dividendInput,
+            taperDate,
+            taperLength,
+            targetIncome,
+            projectionLength,
+            useTaper,
+            stackMode: "average",
+            rampUpMonths: "0",
+        };
         const timer = setTimeout(() => {
+            onProjectionSettingsCacheChange(prev => ({ ...prev, [ticker]: settings }));
             fetch(`http://localhost:5001/api/projection-settings/${ticker}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    monthlyStack: projectedMonthlyStack,
-                    decayMonths,
-                    stockPrice: projectedCost,
-                    dividendInput,
-                    taperDate,
-                    taperLength,
-                    targetIncome,
-                    projectionLength,
-                    useTaper,
-                } satisfies ProjectionSettings),
+                body: JSON.stringify(settings),
             }).catch(err => console.error('Error saving projection settings:', err));
         }, 400);
         return () => clearTimeout(timer);
     }, [ticker, projectedMonthlyStack, decayMonths, projectedCost, dividendInput,
-        taperDate, taperLength, targetIncome, projectionLength, useTaper]);
+        taperDate, taperLength, targetIncome, projectionLength, useTaper]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (purchases.length === 0) {
         return (
