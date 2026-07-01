@@ -25,9 +25,10 @@ interface HomePageProps {
   onSummariesChange: React.Dispatch<React.SetStateAction<Record<string, StockSummary>>>;
   portfolioLoaded: boolean;
   lookedUpTickers: RefObject<Set<string>>;
+  onTransactionCacheChange: React.Dispatch<React.SetStateAction<Record<string, import('./types').Transaction[]>>>;
 }
 
-const HomePage = ({ onNavigateToDashboard, message, onClearMessage, filterStatus, onFilterStatusChange, filterValue, onFilterValueChange, filterDividends, onFilterDividendsChange, stocks, onStocksChange, summaries, onSummariesChange, portfolioLoaded, lookedUpTickers }: HomePageProps) => {
+const HomePage = ({ onNavigateToDashboard, message, onClearMessage, filterStatus, onFilterStatusChange, filterValue, onFilterValueChange, filterDividends, onFilterDividendsChange, stocks, onStocksChange, summaries, onSummariesChange, portfolioLoaded, lookedUpTickers, onTransactionCacheChange }: HomePageProps) => {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -89,6 +90,7 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage, filterStatus
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       onSummariesChange({});
       onStocksChange([]);
+      onTransactionCacheChange({});
       setImportStatus("All data deleted.");
     } catch (err) {
       setImportStatus(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -165,6 +167,9 @@ const HomePage = ({ onNavigateToDashboard, message, onClearMessage, filterStatus
       onClearMessage?.();
       onStocksChange(stocksData);
       onSummariesChange(summaryData);
+      // Clear the per-ticker transaction cache so Dashboard re-fetches fresh data
+      // after import (otherwise it can show stale share counts from the old transactions)
+      onTransactionCacheChange({});
     } catch (err) {
       setImportStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }

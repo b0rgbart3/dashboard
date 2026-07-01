@@ -39,6 +39,13 @@ export function parseRobinhoodCSV(
 
   const KNOWN_TYPES = new Set(['BUY', 'SELL', 'SLIP', 'MDIV', 'CDIV', 'DTAX', 'DFEE', 'AFEE', 'REC', 'dividend', 'purchase']);
   const runningQtys: Record<string, number> = {};
+  // Tracks the running qty at the time the FIRST MRGS row fires for a given ticker+date pair.
+  // Used to detect which of two same-date MRGS rows is the outgoing (removal) share leg. [HUT-style]
+  const preMergerQtys: Record<string, number> = {}; // "TICKER::YYYY-MM-DD" → qty before any MRGS
+  // Tracks SPINOFF events by ticker+date+qty (4 dp) to skip duplicate MRGS rows on the same date. [CORZ-style]
+  const spinoffsByKey = new Set<string>(); // "TICKER::YYYY-MM-DD::qty.toFixed(4)"
+  // Tracks cumulative MRGS_MERGER qty added per ticker to detect re-opening of a closed position. [CORZ^-style]
+  const mrgsNetReceived: Record<string, number> = {}; // ticker → total qty added via MRGS (non-cancelled)
 
   for (let i = 0; i < dataRows.length; i++) {
     const cols = dataRows[i];
@@ -121,12 +128,36 @@ export function parseRobinhoodCSV(
       if (hasMergerShares) {
         if (rawCode === 'MRGS') {
           const amountVal = rawAmount ? parseFloat(stripNumeric(rawAmount)) : NaN;
-          if (!isNaN(amountVal) && amountVal < 0) {
+          const mergerKey = `${ticker}::${date}`;
+          // Record the running qty before any MRGS rows fire for this ticker+date
+          if (!(mergerKey in preMergerQtys)) preMergerQtys[mergerKey] = runningQtys[ticker] ?? 0;
+          const preMergerQty = preMergerQtys[mergerKey];
+          // Detect the outgoing (removal) leg:
+          //   1. Robinhood marks it with a negative amount, OR
+          //   2. Heuristic: qty ≈ pre-merger holding (within 1%) — the leg that "returned" all
+          //      the old shares before the merger deposited new ones.
+          const isOutgoing = (!isNaN(amountVal) && amountVal < 0) ||
+            (preMergerQty > 0 && Math.abs(explicitQty - preMergerQty) / preMergerQty < 0.01);
+          if (isOutgoing) {
             entries.push({ date, type: 'SHARE_EXCHANGE_OUT', quantity: explicitQty, price: 0, ticker });
             runningQtys[ticker] = Math.max(0, (runningQtys[ticker] ?? 0) - explicitQty);
           } else {
-            entries.push({ date, type: 'MRGS_MERGER', quantity: explicitQty, price: Math.abs(price), ticker });
-            runningQtys[ticker] = (runningQtys[ticker] ?? 0) + explicitQty;
+            // [CORZ-style] Skip MRGS if a SPINOFF on the same date already accounts for these shares
+            const spinoffKey = `${ticker}::${date}::${explicitQty.toFixed(4)}`;
+            const isDupOfSpinoff = spinoffsByKey.has(spinoffKey);
+
+            // [CORZ^-style] Skip MRGS if the position was just closed and qty matches prior total receipt
+            const currentQty = runningQtys[ticker] ?? 0;
+            const prevReceived = mrgsNetReceived[ticker] ?? 0;
+            const isDupReopen = currentQty < 0.001 && prevReceived > 0 &&
+              Math.abs(explicitQty - prevReceived) / prevReceived < 0.01;
+
+            if (!isDupOfSpinoff && !isDupReopen) {
+              entries.push({ date, type: 'MRGS_MERGER', quantity: explicitQty, price: Math.abs(price), ticker });
+              runningQtys[ticker] = (runningQtys[ticker] ?? 0) + explicitQty;
+              mrgsNetReceived[ticker] = (mrgsNetReceived[ticker] ?? 0) + explicitQty;
+            }
+            // else: silently suppress — this MRGS is a duplicate of an already-counted event
           }
         } else {
           entries.push({ date, type: 'MRGC_MERGER', quantity: explicitQty, price: Math.abs(price), ticker });
@@ -156,6 +187,8 @@ export function parseRobinhoodCSV(
     if (rawCode === 'SOFF') {
       entries.push({ date, type: 'SPINOFF', quantity: qty, price: Math.abs(price), ticker });
       runningQtys[ticker] = (runningQtys[ticker] ?? 0) + qty;
+      // Record so a duplicate MRGS on the same date+qty can be suppressed [CORZ-style]
+      spinoffsByKey.add(`${ticker}::${date}::${qty.toFixed(4)}`);
       continue;
     }
 

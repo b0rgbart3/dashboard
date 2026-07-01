@@ -50,6 +50,11 @@ export function usePortfolioSort(
         ytdRealizedPnL: s.ytdRealizedPnL ?? 0,
         ytdSlipIncome: s.ytdSlipIncome ?? 0,
         gainPct: s.totalInvested > 0 ? (s.totalReturn / s.totalInvested) * 100 : 0,
+        ytdGainPct: (() => {
+          if (s.totalInvested <= 0) return 0;
+          const ytdReturn = (s.ytdRealizedPnL ?? 0) + (s.ytdDividendIncome ?? 0) + (s.ytdSlipIncome ?? 0) + (s.ytdRocIncome ?? 0) + (s.ytdMarginCreditIncome ?? 0) - (s.ytdWithheldTax ?? 0) - (s.ytdBrokerageFeeExpense ?? 0) - (s.ytdMarginInterestExpense ?? 0);
+          return (ytdReturn / s.totalInvested) * 100;
+        })(),
         yearsHeld: s.earliestPurchaseDate
           ? (Date.now() - new Date(s.earliestPurchaseDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
           : null,
@@ -81,6 +86,7 @@ export function usePortfolioSort(
         case "totalValue": cmp = a.totalValue - b.totalValue; break;
         case "totalGain":  cmp = a.totalGain - b.totalGain; break;
         case "gainPct":       cmp = a.gainPct - b.gainPct; break;
+        case "ytdGainPct":    cmp = a.ytdGainPct - b.ytdGainPct; break;
         case "annualGainPct": cmp = (a.annualGainPct ?? -Infinity) - (b.annualGainPct ?? -Infinity); break;
         case "totalShares":   cmp = a.totalShares - b.totalShares; break;
         case "dividends":     cmp = a.dividends - b.dividends; break;

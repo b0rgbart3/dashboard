@@ -43,6 +43,7 @@ const PortfolioTable = ({
     { label: "Value",    key: "totalValue",     align: "right", defaultDir: "desc" },
     { label: "G/L $",    key: "totalGain",      align: "right", defaultDir: "desc" },
     { label: "TOT%",     key: "gainPct",        align: "right", defaultDir: "desc" },
+    { label: "YTD%",      key: "ytdGainPct",   align: "right", defaultDir: "desc" },
     { label: "Ann%",     key: "annualGainPct",  align: "right", defaultDir: "desc" },
     { label: "Shrs",     key: "totalShares",    align: "right", defaultDir: "desc" },
     { label: "Divs",     key: "dividends",      align: "right", defaultDir: "desc" },
@@ -118,6 +119,9 @@ const PortfolioTable = ({
                     <td style={styles.annualGainCell(gainColor)}>
                       {row.gainPct >= 0 ? "+" : ""}{row.gainPct.toFixed(1)}%
                     </td>
+                    <td style={styles.annualGainCell(row.ytdGainPct >= 0 ? "var(--success-green)" : "#ef4444")}>
+                      {row.ytdGainPct >= 0 ? "+" : ""}{row.ytdGainPct.toFixed(1)}%
+                    </td>
                     <td style={styles.annualGainCell(row.annualGainPct == null ? "var(--text-secondary)" : row.annualGainPct >= 0 ? gainColor : "#ef4444")}>
                       {row.annualGainPct == null ? "—" : `${row.annualGainPct >= 0 ? "+" : ""}${row.annualGainPct.toFixed(1)}%`}
                     </td>
@@ -179,6 +183,9 @@ const PortfolioTable = ({
                 const totalRealized    = tableRows.reduce((sum, r) => sum + r.realizedPnL, 0);
                 const totalYtdRealized = tableRows.reduce((sum, r) => sum + r.ytdRealizedPnL, 0);
                 const totalGainPct     = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+                const totalYtdGainPct  = totalInvested > 0
+                  ? tableRows.reduce((sum, r) => sum + (r.ytdGainPct / 100) * r.totalInvested, 0) / totalInvested * 100
+                  : 0;
                 const glColor          = totalGain >= 0 ? "var(--success-green)" : "#ef4444";
                 const rowsWithAnnual   = tableRows.filter(r => r.annualGainPct != null && r.yearsHeld != null);
                 const wNum = rowsWithAnnual.reduce((sum, r) => sum + r.annualGainPct! * r.totalInvested * r.yearsHeld!, 0);
@@ -206,6 +213,9 @@ const PortfolioTable = ({
                     </td>
                     <td style={styles.totalGainLossCell(glColor)}>
                       {totalGainPct >= 0 ? "+" : ""}{totalGainPct.toFixed(1)}%
+                    </td>
+                    <td style={styles.totalGainLossCell(totalYtdGainPct >= 0 ? "var(--success-green)" : "#ef4444")}>
+                      {totalYtdGainPct >= 0 ? "+" : ""}{totalYtdGainPct.toFixed(1)}%
                     </td>
                     <td style={styles.totalInnerCell}>
                       <div style={styles.totalAnnualGainCell(weightedAnnualGainPct == null ? "var(--text-secondary)" : weightedAnnualGainPct >= 0 ? glColor : "#ef4444")}>

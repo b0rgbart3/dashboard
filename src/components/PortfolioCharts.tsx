@@ -23,6 +23,12 @@ interface DividendDataPoint {
   [ticker: string]: number | string;
 }
 
+interface BenchmarkPoint {
+  month: string;
+  portfolioAnn: number;
+  spyAnn: number;
+}
+
 const PIE_COLORS = [
   "#7b3fe4", "#007bff", "#24ad64", "#f2a900", "#eb4d4b",
   "#a855f7", "#38bdf8", "#34d399", "#fb923c", "#f472b6",
@@ -65,20 +71,24 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
   const [history, setHistory] = useState<MonthlyValue[] | null>(null);
   const [monthlyDivs, setMonthlyDivs] = useState<Array<{ month: string; dividends: number }> | null>(null);
   const [dividendsByTicker, setDividendsByTicker] = useState<DividendDataPoint[] | null>(null);
+  const [benchmark, setBenchmark] = useState<BenchmarkPoint[] | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch(`${API_BASE}/api/portfolio/monthly-value`).then(r => r.json()),
       fetch(`${API_BASE}/api/portfolio/monthly-dividends`).then(r => r.json()),
       fetch(`${API_BASE}/api/portfolio/monthly-dividends-by-ticker`).then(r => r.json()),
-    ]).then(([hist, divs, divsByTicker]) => {
+      fetch(`${API_BASE}/api/portfolio/benchmark`).then(r => r.json()),
+    ]).then(([hist, divs, divsByTicker, bench]) => {
       setHistory(hist as MonthlyValue[]);
       setMonthlyDivs(divs as Array<{ month: string; dividends: number }>);
       setDividendsByTicker(divsByTicker as DividendDataPoint[]);
+      setBenchmark(bench as BenchmarkPoint[]);
     }).catch(() => {
       setHistory([]);
       setMonthlyDivs([]);
       setDividendsByTicker([]);
+      setBenchmark([]);
     });
   }, []);
 
@@ -157,7 +167,18 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     }
   }
 
+  const benchmarkLoading = benchmark === null;
+  const benchmarkPoints = benchmark ?? [];
+  const annMin = benchmarkPoints.length > 0 ? Math.min(...benchmarkPoints.map(d => Math.min(d.portfolioAnn, d.spyAnn))) : 0;
+  const annMax = benchmarkPoints.length > 0 ? Math.max(...benchmarkPoints.map(d => Math.max(d.portfolioAnn, d.spyAnn))) : 20;
+  const annPad = Math.max(3, (annMax - annMin) * 0.15);
+  const annDomain: [number, number] = [Math.floor(annMin - annPad), Math.ceil(annMax + annPad)];
+
+  // Last point for headline stats
+  const lastBench = benchmarkPoints.length > 0 ? benchmarkPoints[benchmarkPoints.length - 1] : null;
+
   return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", width: "100%" }}>
     <div style={{ display: "flex", gap: "1.5rem", width: "100%", alignItems: "stretch" }}>
 
       {/* Chart 1 — Pie: Holdings Breakdown */}
@@ -320,6 +341,30 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
       {/* Chart 3 — Line: Monthly Dividend Payout */}
       <div className="glass-card" style={{ ...cardStyle, minHeight: 0 }}>
         <div style={chartTitleStyle}>Monthly Dividend Income</div>
+        {!loading && dividendData.length > 0 && (() => {
+          const lastTotal = dividendData.filter(d => typeof d.total === 'number' && (d.total as number) > 0).at(-1)?.total;
+          if (!lastTotal || typeof lastTotal !== 'number') return null;
+          const projAnnual = lastTotal * 12;
+          const projMonthly = lastTotal;
+          const projDaily = projAnnual / 365;
+          const color = "#24ad64";
+          return (
+            <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+              Projected Growth:{" "}
+              <span style={{ fontWeight: 700, color }}>
+                ${projAnnual.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </span>
+              <span style={{ color: "var(--text-secondary)", margin: "0 6px" }}>|</span>
+              <span style={{ fontWeight: 700, color }}>
+                ${projMonthly.toLocaleString("en-US", { maximumFractionDigits: 0 })}/ mo
+              </span>
+              <span style={{ color: "var(--text-secondary)", margin: "0 6px" }}>|</span>
+              <span style={{ fontWeight: 700, color }}>
+                ${projDaily.toLocaleString("en-US", { maximumFractionDigits: 0 })}/ day
+              </span>
+            </div>
+          );
+        })()}
         {loading ? (
           <div style={spinnerWrapStyle}><div className="spinner" /></div>
         ) : dividendData.length === 0 ? (
@@ -374,7 +419,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 yAxisId="right"
                 type="monotone"
                 dataKey="total"
-                name="Total"
+                name="Mo. Total"
                 stroke="#24ad64"
                 dot={false}
                 strokeWidth={2.5}
@@ -386,6 +431,76 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
           </div>
         )}
       </div>
+
+    </div>
+
+    {/* Chart 4 — Annualized Return vs SPY */}
+    <div className="glass-card" style={{ padding: "1rem 8px" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+        <div style={chartTitleStyle}>Annualized Return vs SPY</div>
+        {lastBench && (() => {
+          const diff = lastBench.portfolioAnn - lastBench.spyAnn;
+          const portColor = lastBench.portfolioAnn >= 0 ? "var(--success-green)" : "#ef4444";
+          const spyColor  = lastBench.spyAnn >= 0 ? "#007bff" : "#ef4444";
+          const diffColor = diff >= 0 ? "var(--success-green)" : "#ef4444";
+          const badge = (val: number, color: string, label: string) => (
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, padding: "2px 8px", borderRadius: 6,
+              color, background: `${color}1a`, border: `1px solid ${color}4d` }}>
+              {val >= 0 ? "+" : ""}{val.toFixed(1)}% {label}
+            </span>
+          );
+          return (
+            <>
+              {badge(lastBench.portfolioAnn, portColor, "Portfolio")}
+              {badge(lastBench.spyAnn, spyColor, "SPY")}
+              {badge(diff, diffColor, diff >= 0 ? "ahead" : "behind")}
+            </>
+          );
+        })()}
+        <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginLeft: "auto" }}>
+          SPY lump-sum from portfolio start · starts 1yr in
+        </span>
+      </div>
+      {benchmarkLoading ? (
+        <div style={spinnerWrapStyle}><div className="spinner" /></div>
+      ) : benchmarkPoints.length === 0 ? (
+        <div style={spinnerWrapStyle}>
+          <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+            Load the portfolio history chart first, then refresh to see benchmark data.
+          </span>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={benchmarkPoints} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <XAxis
+              dataKey="month"
+              tickFormatter={fmtMonth}
+              tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+              interval="preserveStartEnd"
+              minTickGap={40}
+            />
+            <YAxis
+              tickFormatter={v => `${v >= 0 ? "+" : ""}${v}%`}
+              tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+              width={52}
+              domain={annDomain}
+            />
+            <ReTooltip
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              labelFormatter={(m: any) => fmtMonth(String(m))}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any, name: any) => [`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`, name]}
+              contentStyle={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 8, fontSize: "0.8rem" }}
+            />
+            <Legend wrapperStyle={{ fontSize: "0.75rem", paddingTop: 4 }} />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.4)" strokeWidth={1} strokeDasharray="4 2" />
+            <Line type="monotone" dataKey="portfolioAnn" name="Portfolio Ann%" stroke="#7b3fe4" dot={false} strokeWidth={2.5} />
+            <Line type="monotone" dataKey="spyAnn"       name="SPY Ann%"       stroke="#38bdf8" dot={false} strokeWidth={2} strokeDasharray="4 2" />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
 
     </div>
   );

@@ -18,6 +18,7 @@ const STOCKS_FILE = path.join(__dirname, 'data', 'stocks.json');
 const PROJECTION_SETTINGS_FILE = path.join(__dirname, 'data', 'projection-settings.json');
 const SUMMARY_CACHE_FILE = path.join(__dirname, 'data', 'summary-cache.json');
 const HISTORY_CACHE_FILE = path.join(__dirname, 'data', 'portfolio-history-cache.json');
+const BENCHMARK_CACHE_FILE = path.join(__dirname, 'data', 'benchmark-cache.json');
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -48,6 +49,7 @@ if (!fs.existsSync(PROJECTION_SETTINGS_FILE)) {
 function invalidateSummaryCache() {
     if (fs.existsSync(SUMMARY_CACHE_FILE)) fs.unlinkSync(SUMMARY_CACHE_FILE);
     if (fs.existsSync(HISTORY_CACHE_FILE)) fs.unlinkSync(HISTORY_CACHE_FILE);
+    if (fs.existsSync(BENCHMARK_CACHE_FILE)) fs.unlinkSync(BENCHMARK_CACHE_FILE);
 }
 
 // GET transactions (optional ?ticker= filter)
@@ -88,24 +90,56 @@ app.post('/api/transactions/bulk', (req: Request, res: Response) => {
         if (err) return res.status(500).send('Error reading transactions file');
         const transactions = JSON.parse(data);
 
-        type TxnLike = { ticker: string; date: string; type: string; quantity: number; price: number };
-        const txnKey = (t: TxnLike) =>
-            `${t.ticker}::${t.date}::${t.type}::${t.quantity}::${Math.round((t.price ?? 0) * 1000)}`;
+        type TxnLike = { id: number; ticker: string; date: string; type: string; quantity: number; price: number };
+        // Corporate-action types are identified purely by date+ticker+qty+price (type-agnostic).
+        // This lets a re-import with corrected classification (e.g. MRGS_MERGER → SHARE_EXCHANGE_OUT)
+        // replace the stale wrong-type entry rather than coexist alongside it.
+        const CA_TYPES = new Set(['MRGS_MERGER','MRGC_MERGER','SHARE_EXCHANGE_OUT','SHARE_EXCHANGE','SPINOFF','REC','SPLIT','RETURN_OF_CAPITAL']);
+        const strictKey  = (t: TxnLike) => `${t.ticker}::${t.date}::${t.type}::${t.quantity}::${Math.round((t.price ?? 0) * 1000)}`;
+        const flexKey    = (t: TxnLike) => `${t.ticker}::${t.date}::CA::${t.quantity.toFixed(4)}::${Math.round((t.price ?? 0) * 1000)}`;
+        const keyFor     = (t: TxnLike) => CA_TYPES.has(t.type) ? flexKey(t) : strictKey(t);
 
-        const existingKeys = new Set(transactions.map(txnKey));
+        // Map flex/strict key → existing transaction id(s)
+        const existingByKey = new Map<string, number[]>();
+        for (const t of transactions as TxnLike[]) {
+            const k = keyFor(t);
+            if (!existingByKey.has(k)) existingByKey.set(k, []);
+            existingByKey.get(k)!.push(t.id);
+        }
+
+        const toDelete    = new Set<number>(); // existing IDs that will be replaced
+        const seenNewKeys = new Set<string>(); // prevent inserting the same new key twice
         const inserted: TxnLike[] = [];
         let skipped = 0;
-        for (const t of newTransactions) {
-            const key = txnKey(t);
-            if (existingKeys.has(key)) {
-                skipped++;
+
+        for (const t of newTransactions as TxnLike[]) {
+            const k = keyFor(t);
+            if (seenNewKeys.has(k)) { skipped++; continue; }
+
+            const existingIds = existingByKey.get(k);
+            if (existingIds) {
+                // Key already in DB. Check if it's an exact type match (true dup) or a reclassification.
+                const allSameType = existingIds.every(id => {
+                    const ex = (transactions as TxnLike[]).find(x => x.id === id);
+                    return ex?.type === t.type;
+                });
+                if (allSameType) {
+                    skipped++; // genuine duplicate — nothing to do
+                } else {
+                    // Type mismatch: stale entries from old import logic — replace with corrected one
+                    existingIds.forEach(id => toDelete.add(id));
+                    inserted.push(t);
+                    seenNewKeys.add(k);
+                    existingByKey.set(k, []); // mark as consumed
+                }
             } else {
                 inserted.push(t);
-                existingKeys.add(key);
+                seenNewKeys.add(k);
+                existingByKey.set(k, []); // prevent duplicates within this batch
             }
         }
 
-        const updated = [...transactions, ...inserted];
+        const updated = [...(transactions as TxnLike[]).filter(t => !toDelete.has(t.id)), ...inserted];
         fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing transactions file');
             invalidateSummaryCache();
@@ -402,6 +436,15 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
         // Must process chronologically so splits apply at the correct point
         const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+        // Pre-collect SPINOFF signatures (ticker::date::qty4dp) for MRGS dedup [CORZ-style]
+        const spinoffSigs = new Set<string>();
+        for (const t of sorted) {
+            if (t.type === 'SPINOFF') spinoffSigs.add(`${t.ticker}::${t.date}::${t.quantity.toFixed(4)}`);
+        }
+        // Per-ticker state for MRGS heuristics
+        const preMergerQtyMap: Record<string, number> = {}; // "TICKER::DATE" → shares before first MRGS on that date [HUT-style]
+        const mrgsNetReceived:  Record<string, number> = {}; // ticker → cumulative net MRGS qty added [CORZ^-style]
+
         // SHARE_EXCHANGE rows come from Robinhood's SXCH with blank price/amount.
         // Cost basis is inherited from the predecessor security that was exchanged out.
         // Match each SHARE_EXCHANGE with its corresponding SHARE_EXCHANGE_OUT by date + quantity,
@@ -461,6 +504,40 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
                 cb.runningCost += t.price * t.quantity;
                 cb.runningShares += t.quantity;
             } else if (isRec) {
+                // ── MRGS_MERGER heuristics ────────────────────────────────────────────────
+                // Three patterns that produce incorrect DB entries via CSV import quirks.
+                // Each is suppressed here so the calculation stays correct even when old
+                // stale entries exist (a re-import with the fixed parser will also remove them).
+                if (t.type === 'MRGS_MERGER') {
+                    const mKey = `${t.ticker}::${t.date}`;
+                    if (!(mKey in preMergerQtyMap)) preMergerQtyMap[mKey] = s.totalShares;
+                    const preMerger = preMergerQtyMap[mKey];
+
+                    // [HUT-style] qty ≈ pre-merger holding → this is the outgoing (removal) leg
+                    if (preMerger > 0 && Math.abs(t.quantity - preMerger) / preMerger < 0.01) {
+                        s.totalShares -= t.quantity;
+                        s.lastExchangeOutDate = t.date as string;
+                        if (cb.runningShares > 0) {
+                            const avg = cb.runningCost / cb.runningShares;
+                            cb.runningCost -= avg * Math.min(t.quantity, cb.runningShares);
+                            cb.runningShares = Math.max(0, cb.runningShares - t.quantity);
+                        }
+                        continue; // handled — skip normal isRec path below
+                    }
+                    // [CORZ-style] a SPINOFF on the same date already counted these shares
+                    if (spinoffSigs.has(`${t.ticker}::${t.date}::${t.quantity.toFixed(4)}`)) {
+                        continue; // suppress duplicate
+                    }
+                    // [CORZ^-style] position was closed; qty matches prior total receipt → duplicate re-open
+                    const prevReceived = mrgsNetReceived[t.ticker] ?? 0;
+                    if (s.totalShares < 0.001 && prevReceived > 0 &&
+                        Math.abs(t.quantity - prevReceived) / prevReceived < 0.01) {
+                        continue; // suppress duplicate re-opening
+                    }
+                    // Normal MRGS_MERGER — record receipt and fall through to shared isRec logic
+                    mrgsNetReceived[t.ticker] = (mrgsNetReceived[t.ticker] ?? 0) + t.quantity;
+                }
+                // ─────────────────────────────────────────────────────────────────────────
                 const effectivePrice = (t.type === 'SHARE_EXCHANGE' && t.price === 0)
                     ? (exchangePriceLookup[`${t.ticker}|${t.date}`] ?? 0)
                     : t.price;
@@ -554,6 +631,12 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
 
         const result: Record<string, { totalShares: number; totalInvested: number; sellProceeds: number; realizedPnL: number; ytdRealizedPnL: number; dividendIncome: number; ytdDividendIncome: number; withheldTax: number; ytdWithheldTax: number; slipIncome: number; ytdSlipIncome: number; brokerageFeeExpense: number; ytdBrokerageFeeExpense: number; marginInterestExpense: number; ytdMarginInterestExpense: number; marginCreditIncome: number; ytdMarginCreditIncome: number; rocIncome: number; ytdRocIncome: number; marketValue: number; totalReturn: number; hasDividends: boolean; costBasis: { monthly: Record<string, number>; yearly: Record<string, number>; total: number }; earliestPurchaseDate: string | null; closedDate: string | null; rating: number | null; absoluteRating: number | null; stockType: 'income' | 'growth' | 'balanced' | null }> = {};
         for (const [ticker, s] of Object.entries(map)) {
+            // Clamp near-zero residuals to exactly 0 — rounding noise from split ratios,
+            // truncated CSV quantities, or merger share conversions can leave a sub-cent
+            // ghost position (e.g. 1.5e-05 shares) that falsely marks the position active.
+            // Anything under 0.001 shares (~$0.01 at typical prices) is treated as closed.
+            if (s.totalShares > 0 && s.totalShares < 0.001) s.totalShares = 0;
+
             const price = livePrices[ticker] ?? s.lastPrice;
             const netInvested = s.totalBuyCost - s.totalSellProceeds;
             const marketValue = +(s.totalShares * price).toFixed(2);
@@ -678,7 +761,7 @@ app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
         return res.status(500).send('Error reading transactions file');
     }
 
-    const divTypes = new Set(['MDIV', 'CDIV', 'dividend']);
+    const divTypes = new Set(['MDIV', 'CDIV', 'dividend', 'RETURN_OF_CAPITAL']);
     const divTxns = transactions.filter(t => divTypes.has(t.type));
     if (divTxns.length === 0) return res.json([]);
 
@@ -708,7 +791,7 @@ app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
     }
 
     // Tickers known to pay monthly — always use actual amounts, never spread
-    const KNOWN_MONTHLY_PAYERS = new Set(['SATA']);
+    const KNOWN_MONTHLY_PAYERS = new Set(['SATA', 'STRC']);
 
     // Accumulate into result
     const result: Record<string, number> = {};
@@ -758,7 +841,7 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
         return res.status(500).send('Error reading transactions file');
     }
 
-    const divTypes = new Set(['MDIV', 'CDIV', 'dividend']);
+    const divTypes = new Set(['MDIV', 'CDIV', 'dividend', 'RETURN_OF_CAPITAL']);
     const divTxns = transactions.filter(t => divTypes.has(t.type));
     if (divTxns.length === 0) return res.json([]);
 
@@ -786,7 +869,7 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
         tickerYearMap[t.ticker][year][month] = +(prev + t.price * t.quantity).toFixed(2);
     }
 
-    const KNOWN_MONTHLY_PAYERS = new Set(['SATA']);
+    const KNOWN_MONTHLY_PAYERS = new Set(['SATA', 'STRC']);
 
     const tickerResult: Record<string, Record<string, number>> = {};
     const totalResult: Record<string, number> = {};
@@ -825,7 +908,9 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
     const output = allMonths.map(m => {
         const row: Record<string, number | string> = { month: m };
         for (const [ticker, monthlyData] of Object.entries(tickerResult)) {
-            row[ticker] = +monthlyData[m].toFixed(2);
+            const val = +monthlyData[m].toFixed(2);
+            // Omit zero months so connectNulls bridges gaps rather than dipping to $0
+            if (val > 0) row[ticker] = val;
         }
         row.total = +totalResult[m].toFixed(2);
         return row;
@@ -948,6 +1033,75 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
     }
 
     try { fs.writeFileSync(HISTORY_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore */ }
+    res.json(result);
+});
+
+// GET monthly portfolio Ann% vs SPY Ann% for benchmark comparison chart
+app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
+    if (fs.existsSync(BENCHMARK_CACHE_FILE)) {
+        try {
+            return res.json(JSON.parse(fs.readFileSync(BENCHMARK_CACHE_FILE, 'utf8')));
+        } catch { /* fall through and rebuild */ }
+    }
+
+    if (!fs.existsSync(HISTORY_CACHE_FILE)) return res.json([]);
+    let history: Array<{ month: string; totalValue: number; totalInvested: number; totalDividends: number }>;
+    try {
+        history = JSON.parse(fs.readFileSync(HISTORY_CACHE_FILE, 'utf8'));
+    } catch { return res.json([]); }
+    if (history.length < 2) return res.json([]);
+
+    // First month that has any invested capital
+    const startEntry = history.find(h => h.totalInvested > 0);
+    if (!startEntry) return res.json([]);
+    const startMonth = startEntry.month;
+    const [sy, sm] = startMonth.split('-').map(Number);
+    const startMonthNum = sy * 12 + sm;
+
+    // Fetch SPY adjusted monthly closes from portfolio start to today
+    const spyPrices: Record<string, number> = {};
+    try {
+        const spyHist = await withTimeout(
+            yahooFinance.chart('SPY', { period1: new Date(`${startMonth}-01`), period2: new Date(), interval: '1mo' }),
+            12000
+        );
+        for (const row of spyHist.quotes) {
+            const m = row.date.toISOString().substring(0, 7);
+            const price = row.adjclose ?? row.close;
+            if (typeof price === 'number' && price > 0) spyPrices[m] = price;
+        }
+    } catch { return res.json([]); }
+
+    const spyStart = spyPrices[startMonth];
+    if (!spyStart) return res.json([]);
+
+    const result: Array<{ month: string; portfolioAnn: number; spyAnn: number }> = [];
+    for (const row of history) {
+        const [y, m] = row.month.split('-').map(Number);
+        const monthsElapsed = y * 12 + m - startMonthNum;
+        // Skip the first 12 months — annualized numbers are too volatile that early
+        if (monthsElapsed < 12 || row.totalInvested <= 0) continue;
+        const years = monthsElapsed / 12;
+
+        // Portfolio Ann%: uses net invested (history already deducts sell proceeds from totalInvested)
+        const totalReturn = row.totalValue + row.totalDividends - row.totalInvested;
+        const factor = 1 + totalReturn / row.totalInvested;
+        if (factor <= 0) continue;
+        const portfolioAnn = (Math.pow(factor, 1 / years) - 1) * 100;
+
+        // SPY Ann%: lump-sum from portfolio start date to this month
+        const spyPrice = spyPrices[row.month];
+        if (!spyPrice) continue;
+        const spyAnn = (Math.pow(spyPrice / spyStart, 1 / years) - 1) * 100;
+
+        result.push({
+            month: row.month,
+            portfolioAnn: +portfolioAnn.toFixed(1),
+            spyAnn: +spyAnn.toFixed(1),
+        });
+    }
+
+    try { fs.writeFileSync(BENCHMARK_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore */ }
     res.json(result);
 });
 

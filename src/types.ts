@@ -2,7 +2,7 @@ export type FilterValue =
   | "all"
   | "exact0"
   | "lt100" | "lt1000" | "lt5000" | "lt10000"
-  | "gt500" | "gt1000" | "gt5000" | "gt10000";
+  | "gt10" | "gt100" | "gt500" | "gt1000" | "gt5000" | "gt10000";
 
 export function matchesValueFilter(marketValue: number, filter: FilterValue): boolean {
   switch (filter) {
@@ -12,6 +12,8 @@ export function matchesValueFilter(marketValue: number, filter: FilterValue): bo
     case "lt1000":  return marketValue < 1000;
     case "lt5000":  return marketValue < 5000;
     case "lt10000": return marketValue < 10000;
+    case "gt10":    return marketValue > 10;
+    case "gt100":   return marketValue > 100;
     case "gt500":   return marketValue > 500;
     case "gt1000":  return marketValue > 1000;
     case "gt5000":  return marketValue > 5000;

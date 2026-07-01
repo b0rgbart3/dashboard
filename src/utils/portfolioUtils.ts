@@ -4,7 +4,7 @@ export const REQUIRED_COLUMNS = ["activity date", "instrument", "trans code", "q
 
 export type SortKey =
   | "ticker" | "name" | "totalInvested" | "totalValue" | "totalGain"
-  | "gainPct" | "annualGainPct" | "totalShares" | "dividends" | "ytdDividends"
+  | "gainPct" | "ytdGainPct" | "annualGainPct" | "totalShares" | "dividends" | "ytdDividends"
   | "slipIncome" | "realizedPnL" | "ytdRealizedPnL" | "held" | "rating" | "absoluteRating";
 
 export interface TableRow {
@@ -21,6 +21,7 @@ export interface TableRow {
   ytdRealizedPnL: number;
   ytdSlipIncome: number;
   gainPct: number;
+  ytdGainPct: number;
   yearsHeld: number | null;
   annualGainPct: number | null;
   heldMs: number | null;

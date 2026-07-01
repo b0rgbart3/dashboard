@@ -77,7 +77,7 @@ export const importProgressLog: CSSProperties = {
   fontFamily: "monospace", opacity: 0.7, maxWidth: "480px", textAlign: "center",
 };
 
-export const portfolioSection: CSSProperties = { width: "100%", maxWidth: "960px" };
+export const portfolioSection: CSSProperties = { width: "100%" };
 
 export const sectionHeading: CSSProperties = {
   fontSize: "1rem", color: "var(--text-secondary)", marginBottom: "0.75rem",

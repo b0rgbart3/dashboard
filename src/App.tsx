@@ -52,6 +52,7 @@ function App() {
             onSummariesChange={setSummaries}
             portfolioLoaded={portfolioLoaded}
             lookedUpTickers={lookedUpTickers}
+            onTransactionCacheChange={setTransactionCache}
           />
         : <Dashboard
             onBack={(msg?: string) => { window.location.hash = ''; setHomeMessage(msg ?? null); setDashboardTicker(undefined); setPage('home'); }}
