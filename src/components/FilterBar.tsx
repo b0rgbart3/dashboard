@@ -59,12 +59,12 @@ const FilterBar = ({
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <SlidersHorizontal
             size={14}
-            style={{ color: "var(--text-secondary)", flexShrink: 0 }}
+            style={{ color: "var(--text-muted)", flexShrink: 0 }}
           />
           <span
             style={{
               fontSize: "12px",
-              color: "var(--text-secondary)",
+              color: "var(--text-muted)",
               whiteSpace: "nowrap",
             }}
           >
@@ -82,14 +82,14 @@ const FilterBar = ({
                 cursor: "pointer",
                 borderColor:
                   filterStatus === s
-                    ? "var(--primary-purple)"
-                    : "var(--card-border)",
+                    ? "var(--brand-accent)"
+                    : "var(--border)",
                 background:
-                  filterStatus === s ? "rgba(69,10,189,0.18)" : "transparent",
+                  filterStatus === s ? "var(--bg-danger)" : "transparent",
                 color:
                   filterStatus === s
-                    ? "var(--text-primary)"
-                    : "var(--text-secondary)",
+                    ? "var(--text)"
+                    : "var(--text-muted)",
                 transition: "all 0.15s",
               }}
             >
@@ -102,7 +102,7 @@ const FilterBar = ({
           <span
             style={{
               fontSize: "12px",
-              color: "var(--text-secondary)",
+              color: "var(--text-muted)",
               whiteSpace: "nowrap",
             }}
           >
@@ -115,10 +115,10 @@ const FilterBar = ({
               fontSize: "12px",
               color:
                 filterValue !== "all"
-                  ? "var(--text-primary)"
-                  : "var(--text-secondary)",
-              background: "var(--card-bg)",
-              border: `1px solid ${filterValue !== "all" ? "var(--primary-purple)" : "var(--card-border)"}`,
+                  ? "var(--text)"
+                  : "var(--text-muted)",
+              background: "var(--bg-card)",
+              border: `1px solid ${filterValue !== "all" ? "var(--brand-accent)" : "var(--border)"}`,
               borderRadius: "6px",
               padding: "3px 22px 3px 8px",
               cursor: "pointer",
@@ -142,7 +142,7 @@ const FilterBar = ({
           <span
             style={{
               fontSize: "12px",
-              color: "var(--text-secondary)",
+              color: "var(--text-muted)",
               whiteSpace: "nowrap",
             }}
           >
@@ -160,16 +160,16 @@ const FilterBar = ({
                 cursor: "pointer",
                 borderColor:
                   filterDividends === d
-                    ? "var(--primary-blue)"
-                    : "var(--card-border)",
+                    ? "var(--brand-primary)"
+                    : "var(--border)",
                 background:
                   filterDividends === d
                     ? "rgba(4,114,231,0.15)"
                     : "transparent",
                 color:
                   filterDividends === d
-                    ? "var(--text-primary)"
-                    : "var(--text-secondary)",
+                    ? "var(--text)"
+                    : "var(--text-muted)",
                 transition: "all 0.15s",
               }}
             >
@@ -184,8 +184,8 @@ const FilterBar = ({
             fontSize: "12px",
             color:
               summariesLoaded && isFiltered
-                ? "var(--warning-orange)"
-                : "var(--text-secondary)",
+                ? "var(--warning)"
+                : "var(--text-muted)",
             whiteSpace: "nowrap",
           }}
         >

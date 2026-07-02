@@ -93,17 +93,17 @@ const PortfolioTable = ({
             </thead>
             <tbody>
               {tableRows.map((row, i) => {
-                const gainColor = row.totalGain >= 0 ? "var(--success-green)" : "var(--primary-blue)";
-                const ratingColor = row.rating === null ? "var(--text-secondary)"
-                  : row.rating >= 7 ? "var(--success-green)"
-                  : row.rating >= 4 ? "var(--warning-orange)"
-                  : "var(--primary-blue)";
+                const gainColor = row.totalGain >= 0 ? "var(--success)" : "var(--brand-primary)";
+                const ratingColor = row.rating === null ? "var(--text-muted)"
+                  : row.rating >= 7 ? "var(--success)"
+                  : row.rating >= 4 ? "var(--warning)"
+                  : "var(--brand-primary)";
                 return (
                   <tr
                     key={row.ticker}
                     style={styles.tableDataRow(i === tableRows.length - 1)}
                     onClick={() => onNavigateToDashboard(row.ticker)}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-row-total)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "")}
                   >
                     <td style={styles.tickerCell} title={row.name}>{row.ticker}</td>
@@ -119,10 +119,10 @@ const PortfolioTable = ({
                     <td style={styles.annualGainCell(gainColor)}>
                       {row.gainPct >= 0 ? "+" : ""}{row.gainPct.toFixed(1)}%
                     </td>
-                    <td style={styles.annualGainCell(row.ytdGainPct >= 0 ? "var(--success-green)" : "var(--primary-blue)")}>
+                    <td style={styles.annualGainCell(row.ytdGainPct >= 0 ? "var(--success)" : "var(--brand-primary)")}>
                       {row.ytdGainPct >= 0 ? "+" : ""}{row.ytdGainPct.toFixed(1)}%
                     </td>
-                    <td style={styles.annualGainCell(row.annualGainPct == null ? "var(--text-secondary)" : row.annualGainPct >= 0 ? gainColor : "var(--primary-blue)")}>
+                    <td style={styles.annualGainCell(row.annualGainPct == null ? "var(--text-muted)" : row.annualGainPct >= 0 ? gainColor : "var(--brand-primary)")}>
                       {row.annualGainPct == null ? "—" : `${row.annualGainPct >= 0 ? "+" : ""}${row.annualGainPct.toFixed(1)}%`}
                     </td>
                     <td style={styles.secondaryValueCell}>
@@ -157,10 +157,10 @@ const PortfolioTable = ({
                       {row.rating !== null ? `${row.rating}` : "—"}
                     </td>
                     <td style={styles.absoluteRatingCell(
-                      row.absoluteRating === null ? "var(--text-secondary)"
-                        : row.absoluteRating >= 7 ? "var(--success-green)"
-                        : row.absoluteRating >= 4 ? "var(--warning-orange)"
-                        : "var(--primary-blue)"
+                      row.absoluteRating === null ? "var(--text-muted)"
+                        : row.absoluteRating >= 7 ? "var(--success)"
+                        : row.absoluteRating >= 4 ? "var(--warning)"
+                        : "var(--brand-primary)"
                     )}>
                       {row.absoluteRating !== null
                         ? <>{row.absoluteRating}{row.stockType ? <span style={styles.stockTypeChip}>-{row.stockType.charAt(0).toUpperCase()}</span> : null}</>
@@ -186,7 +186,7 @@ const PortfolioTable = ({
                 const totalYtdGainPct  = totalInvested > 0
                   ? tableRows.reduce((sum, r) => sum + (r.ytdGainPct / 100) * r.totalInvested, 0) / totalInvested * 100
                   : 0;
-                const glColor          = totalGain >= 0 ? "var(--success-green)" : "var(--primary-blue)";
+                const glColor          = totalGain >= 0 ? "var(--success)" : "var(--brand-primary)";
                 const rowsWithAnnual   = tableRows.filter(r => r.annualGainPct != null && r.yearsHeld != null);
                 const wNum = rowsWithAnnual.reduce((sum, r) => sum + r.annualGainPct! * r.totalInvested * r.yearsHeld!, 0);
                 const wDen = rowsWithAnnual.reduce((sum, r) => sum + r.totalInvested * r.yearsHeld!, 0);
@@ -214,15 +214,15 @@ const PortfolioTable = ({
                     <td style={styles.totalGainLossCell(glColor)}>
                       {totalGainPct >= 0 ? "+" : ""}{totalGainPct.toFixed(1)}%
                     </td>
-                    <td style={styles.totalGainLossCell(totalYtdGainPct >= 0 ? "var(--success-green)" : "var(--primary-blue)")}>
+                    <td style={styles.totalGainLossCell(totalYtdGainPct >= 0 ? "var(--success)" : "var(--brand-primary)")}>
                       {totalYtdGainPct >= 0 ? "+" : ""}{totalYtdGainPct.toFixed(1)}%
                     </td>
                     <td style={styles.totalInnerCell}>
-                      <div style={styles.totalAnnualGainCell(weightedAnnualGainPct == null ? "var(--text-secondary)" : weightedAnnualGainPct >= 0 ? glColor : "var(--primary-blue)")}>
+                      <div style={styles.totalAnnualGainCell(weightedAnnualGainPct == null ? "var(--text-muted)" : weightedAnnualGainPct >= 0 ? glColor : "var(--brand-primary)")}>
                         {weightedAnnualGainPct == null ? "—" : `${weightedAnnualGainPct >= 0 ? "+" : ""}${weightedAnnualGainPct.toFixed(1)}%`}
                         <span style={styles.tableSubLabelWtd}>wtd</span>
                       </div>
-                      <div style={styles.totalSimpleAnnualGainRow(simpleAnnualGainPct == null ? "var(--text-secondary)" : simpleAnnualGainPct >= 0 ? glColor : "var(--primary-blue)")}>
+                      <div style={styles.totalSimpleAnnualGainRow(simpleAnnualGainPct == null ? "var(--text-muted)" : simpleAnnualGainPct >= 0 ? glColor : "var(--brand-primary)")}>
                         {simpleAnnualGainPct == null ? "—" : `${simpleAnnualGainPct >= 0 ? "+" : ""}${simpleAnnualGainPct.toFixed(1)}%`}
                         <span style={styles.tableSubLabel}>avg</span>
                       </div>

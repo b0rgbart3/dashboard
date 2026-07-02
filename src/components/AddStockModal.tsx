@@ -37,7 +37,7 @@ const AddStockModal = ({ onAdd, onClose }: AddStockModalProps) => {
         <div
             style={{
                 position: 'fixed', inset: 0, zIndex: 1000,
-                backgroundColor: 'rgba(0,0,0,0.6)',
+                backgroundColor: 'var(--bg-overlay)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 backdropFilter: 'blur(4px)',
             }}
@@ -49,7 +49,7 @@ const AddStockModal = ({ onAdd, onClose }: AddStockModalProps) => {
                     style={{
                         position: 'absolute', top: '16px', right: '16px',
                         background: 'none', border: 'none', cursor: 'pointer',
-                        color: 'var(--text-secondary)', padding: '4px',
+                        color: 'var(--text-muted)', padding: '4px',
                     }}
                 >
                     <X size={18} />
@@ -88,7 +88,7 @@ const AddStockModal = ({ onAdd, onClose }: AddStockModalProps) => {
                     </div>
 
                     {error && (
-                        <p style={{ color: 'var(--danger-red)', fontSize: '13px', margin: 0 }}>{error}</p>
+                        <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>
                     )}
 
                     <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>

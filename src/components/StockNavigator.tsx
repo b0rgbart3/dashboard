@@ -45,9 +45,9 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAd
                         style={{
                             fontSize: '15px',
                             fontWeight: 600,
-                            color: 'var(--text-primary)',
-                            background: 'var(--card-bg)',
-                            border: '1px solid var(--card-border)',
+                            color: 'var(--text)',
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border)',
                             borderRadius: '6px',
                             padding: '4px 10px',
                             cursor: 'pointer',
@@ -60,7 +60,7 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAd
                         }}
                     >
                         {stocks.map((s, i) => (
-                            <option key={s.ticker} value={i} style={{ background: 'var(--card-bg)', color: 'var(--text-primary)' }}>
+                            <option key={s.ticker} value={i} style={{ background: 'var(--bg-card)', color: 'var(--text)' }}>
                                 {s.name === s.ticker ? s.ticker : `${s.name} (${s.ticker})`}
                             </option>
                         ))}

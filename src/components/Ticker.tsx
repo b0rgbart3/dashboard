@@ -35,7 +35,7 @@ const fmtGain$ = (val: number) =>
   `${val >= 0 ? "+" : "-"}$${fmt$(Math.abs(val))}`;
 
 const gainColor = (val: number) =>
-  val >= 0 ? "var(--success-green)" : "var(--primary-blue)";
+  val >= 0 ? "var(--success)" : "var(--brand-primary)";
 
 const COL_STYLE: React.CSSProperties = {
   width: "25%",
@@ -51,20 +51,20 @@ const HEADER_STYLE: React.CSSProperties = {
   letterSpacing: "0.08em",
   color: "rgba(148, 163, 184, 0.55)",
   paddingBottom: "6px",
-  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+  borderBottom: "1px solid var(--border-divider)",
   marginBottom: "2px",
 };
 
 const LABEL_STYLE: React.CSSProperties = {
   fontSize: "0.8125rem",
-  color: "var(--text-secondary)",
+  color: "var(--text-muted)",
   whiteSpace: "nowrap",
 };
 
 const VALUE_STYLE: React.CSSProperties = {
   fontSize: "0.8125rem",
   fontWeight: 600,
-  color: "var(--text-primary)",
+  color: "var(--text)",
   textAlign: "right",
 };
 
@@ -175,7 +175,7 @@ const Ticker = ({
     <div className="glass-card" style={{ display: "flex", flexDirection: "row" }}>
 
       {/* ── Column 1: Identity ── */}
-      <div style={{ ...COL_STYLE, paddingRight: "1.5rem", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+      <div style={{ ...COL_STYLE, paddingRight: "1.5rem", borderRight: "1px solid var(--border-divider)" }}>
         <div style={{ marginBottom: "6px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div
@@ -190,17 +190,17 @@ const Ticker = ({
                   top: "calc(100% + 8px)",
                   left: 0,
                   zIndex: 100,
-                  background: "var(--card-bg)",
-                  border: "1px solid var(--card-border)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
                   borderRadius: "8px",
                   padding: "10px 14px",
                   width: "340px",
                   maxHeight: "180px",
                   overflowY: "auto",
                   fontSize: "0.75rem",
-                  color: "var(--text-secondary)",
+                  color: "var(--text-muted)",
                   lineHeight: 1.6,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                  boxShadow: "0 8px 24px var(--shadow-mid)",
                   pointerEvents: "none",
                 }}>
                   {description}
@@ -213,8 +213,8 @@ const Ticker = ({
                   fontSize: "0.6rem",
                   fontWeight: 700,
                   letterSpacing: "0.05em",
-                  color: "#007795",
-                  border: "1px solid #007795",
+                  color: "var(--success)",
+                  border: "1px solid var(--success)",
                   borderRadius: "4px",
                   padding: "0 4px",
                   lineHeight: "1.4",
@@ -224,7 +224,7 @@ const Ticker = ({
               </span>
             )}
           </div>
-          <p style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+          <p style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginTop: "2px" }}>
             {name ?? "Stock Tracker"}
           </p>
         </div>
@@ -241,7 +241,7 @@ const Ticker = ({
           <Row label="Rating">
             <span style={{
               ...VALUE_STYLE,
-              color: rating >= 7 ? "var(--success-green)" : rating >= 4 ? "var(--warning-orange)" : "var(--primary-blue)",
+              color: rating >= 7 ? "var(--success)" : rating >= 4 ? "var(--warning)" : "var(--brand-primary)",
             }}>
               {rating.toFixed(1)} / 10
             </span>
@@ -251,7 +251,7 @@ const Ticker = ({
           <Row label={`Abs. Score${stockType ? ` (${stockType})` : ""}`}>
             <span style={{
               ...VALUE_STYLE,
-              color: absoluteRating >= 7 ? "var(--success-green)" : absoluteRating >= 4 ? "var(--warning-orange)" : "var(--primary-blue)",
+              color: absoluteRating >= 7 ? "var(--success)" : absoluteRating >= 4 ? "var(--warning)" : "var(--brand-primary)",
             }}>
               {absoluteRating.toFixed(1)} / 10
             </span>
@@ -259,7 +259,7 @@ const Ticker = ({
         )}
         {closedDate && (
           <Row label="Closed">
-            <span style={{ ...VALUE_STYLE, color: "var(--text-secondary)" }}>
+            <span style={{ ...VALUE_STYLE, color: "var(--text-muted)" }}>
               {new Date(closedDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </span>
           </Row>
@@ -267,13 +267,13 @@ const Ticker = ({
       </div>
 
       {/* ── Column 2: Position ── */}
-      <div style={{ ...COL_STYLE, padding: "0 1.5rem", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+      <div style={{ ...COL_STYLE, padding: "0 1.5rem", borderRight: "1px solid var(--border-divider)" }}>
         <ColHeader title="Position" />
         <Row label="Shares Held">
           <span style={VALUE_STYLE}>{totalShares > 0 ? totalShares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}</span>
         </Row>
         <Row label="Market Value">
-          <span style={{ ...VALUE_STYLE, color: "var(--primary-blue)" }}>${fmt$(marketValue)}</span>
+          <span style={{ ...VALUE_STYLE, color: "var(--brand-primary)" }}>${fmt$(marketValue)}</span>
         </Row>
         {heldDuration !== null && (
           <Row label="Held">
@@ -283,7 +283,7 @@ const Ticker = ({
       </div>
 
       {/* ── Column 3: Performance ── */}
-      <div style={{ ...COL_STYLE, padding: "0 1.5rem", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+      <div style={{ ...COL_STYLE, padding: "0 1.5rem", borderRight: "1px solid var(--border-divider)" }}>
         <ColHeader title="Performance" />
         <Row label="Total Invested">
           <span style={VALUE_STYLE}>${fmt$(totalInvested)}</span>
@@ -345,11 +345,11 @@ const Ticker = ({
             {cashIncome > 0 && (
               <>
                 <Row label="SLIP Income (Total)">
-                  <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(cashIncome)}</span>
+                  <span style={{ ...VALUE_STYLE, color: "var(--success)" }}>${fmt$(cashIncome)}</span>
                 </Row>
                 {avgMonthlyCashIncome !== null && (
                   <Row label="SLIP Income (Avg/mo)">
-                    <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(avgMonthlyCashIncome)}</span>
+                    <span style={{ ...VALUE_STYLE, color: "var(--success)" }}>${fmt$(avgMonthlyCashIncome)}</span>
                   </Row>
                 )}
               </>
@@ -357,28 +357,28 @@ const Ticker = ({
             {dividendIncome > 0 && (
               <>
                 <Row label={withheldTax > 0 ? "Gross Div. Income (Total)" : "Dividend Income (Total)"}>
-                  <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(dividendIncome)}</span>
+                  <span style={{ ...VALUE_STYLE, color: "var(--success)" }}>${fmt$(dividendIncome)}</span>
                 </Row>
                 {avgMonthlyDividendIncome !== null && (
                   <Row label="Dividend Income (Avg/mo)">
-                    <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(avgMonthlyDividendIncome)}</span>
+                    <span style={{ ...VALUE_STYLE, color: "var(--success)" }}>${fmt$(avgMonthlyDividendIncome)}</span>
                   </Row>
                 )}
                 {lastDividendPayment !== null && lastDividendPayment > 0 && (
                   <Row label="Last Dividend Payment">
-                    <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(lastDividendPayment)}</span>
+                    <span style={{ ...VALUE_STYLE, color: "var(--success)" }}>${fmt$(lastDividendPayment)}</span>
                   </Row>
                 )}
               </>
             )}
             {withheldTax > 0 && (
               <Row label="Tax Withheld (DTAX)">
-                <span style={{ ...VALUE_STYLE, color: "var(--primary-blue)" }}>-${fmt$(withheldTax)}</span>
+                <span style={{ ...VALUE_STYLE, color: "var(--brand-primary)" }}>-${fmt$(withheldTax)}</span>
               </Row>
             )}
             {withheldTax > 0 && dividendIncome > 0 && (
               <Row label="Net Dividend Income">
-                <span style={{ ...VALUE_STYLE, color: "var(--success-green)" }}>${fmt$(dividendIncome - withheldTax)}</span>
+                <span style={{ ...VALUE_STYLE, color: "var(--success)" }}>${fmt$(dividendIncome - withheldTax)}</span>
               </Row>
             )}
             {dividendReturnPct !== null && (

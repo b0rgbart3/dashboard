@@ -473,9 +473,9 @@ const ProjectionView = ({
                     border: "none",
                     cursor: "pointer",
                     background: useTaper
-                      ? "var(--primary-purple)"
-                      : "rgba(255,255,255,0.1)",
-                    color: useTaper ? "white" : "var(--text-secondary)",
+                      ? "var(--brand-accent)"
+                      : "var(--border-divider)",
+                    color: useTaper ? "var(--text-on-dark)" : "var(--text-muted)",
                     transition: "all 0.2s",
                   }}
                 >
@@ -543,15 +543,15 @@ const ProjectionView = ({
                         style={{
                           ...(isTargetRow
                             ? {
-                                backgroundColor: "rgba(69, 10, 189, 0.18)",
+                                backgroundColor: "var(--bg-danger)",
                                 boxShadow:
-                                  "inset 0 0 0 1px rgba(69, 10, 189, 0.4)",
+                                  "inset 0 0 0 1px var(--border-danger)",
                               }
                             : isFirstRow
-                              ? { backgroundColor: "rgba(0, 119, 149, 0.10)" }
+                              ? { backgroundColor: "var(--bg-success)" }
                               : {}),
                           ...(isYearBoundary
-                            ? { borderTop: "2px solid rgba(255,255,255,0.6)" }
+                            ? { borderTop: "2px solid var(--chart-stroke-bright)" }
                             : {}),
                         }}
                       >
@@ -635,11 +635,11 @@ const ProjectionView = ({
                 setShowHistory((prev) => !prev);
               }}
               style={{
-                background: "var(--primary-purple)",
+                background: "var(--brand-accent)",
                 padding: "2px 12px",
                 borderRadius: "9999px",
                 fontSize: "12px",
-                color: "white",
+                color: "var(--text-on-dark)",
                 border: "none",
                 cursor: "pointer",
               }}
@@ -660,7 +660,7 @@ const ProjectionView = ({
                 display: "flex",
                 flexDirection: "column",
                 gap: "6px",
-                background: "rgba(17,19,31,0.7)",
+                background: "var(--bg-scrim)",
                 borderRadius: "8px",
                 padding: "8px 12px",
                 backdropFilter: "blur(6px)",
@@ -671,12 +671,12 @@ const ProjectionView = ({
                   style={{
                     width: "24px",
                     height: "3px",
-                    background: "var(--warning-orange)",
+                    background: "var(--warning)",
                     borderRadius: "2px",
                   }}
                 />
                 <span
-                  style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                  style={{ fontSize: "11px", color: "var(--text-muted)" }}
                 >
                   Projected Value
                 </span>
@@ -686,11 +686,11 @@ const ProjectionView = ({
                   style={{
                     width: "24px",
                     height: "0",
-                    borderTop: "2px dashed var(--primary-purple)",
+                    borderTop: "2px dashed var(--brand-accent)",
                   }}
                 />
                 <span
-                  style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                  style={{ fontSize: "11px", color: "var(--text-muted)" }}
                 >
                   Total Spent
                 </span>
@@ -701,12 +701,12 @@ const ProjectionView = ({
                     style={{
                       width: "24px",
                       height: "3px",
-                      background: "var(--primary-blue)",
+                      background: "var(--brand-primary)",
                       borderRadius: "2px",
                     }}
                   />
                   <span
-                    style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                    style={{ fontSize: "11px", color: "var(--text-muted)" }}
                   >
                     Dividend (right axis)
                   </span>
@@ -718,11 +718,11 @@ const ProjectionView = ({
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed var(--warning-orange)",
+                      borderTop: "2px dashed var(--warning)",
                     }}
                   />
                   <span
-                    style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                    style={{ fontSize: "11px", color: "var(--text-muted)" }}
                   >
                     Taper Start
                   </span>
@@ -734,11 +734,11 @@ const ProjectionView = ({
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed #6f46d4",
+                      borderTop: "2px dashed var(--chart-8)",
                     }}
                   />
                   <span
-                    style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                    style={{ fontSize: "11px", color: "var(--text-muted)" }}
                   >
                     Target Income
                   </span>
@@ -750,11 +750,11 @@ const ProjectionView = ({
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed #007795",
+                      borderTop: "2px dashed var(--chart-2)",
                     }}
                   />
                   <span
-                    style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                    style={{ fontSize: "11px", color: "var(--text-muted)" }}
                   >
                     Inv Decay End
                   </span>
@@ -774,12 +774,12 @@ const ProjectionView = ({
                     >
                       <stop
                         offset="5%"
-                        stopColor="var(--warning-orange)"
+                        stopColor="var(--warning)"
                         stopOpacity={0.3}
                       />
                       <stop
                         offset="95%"
-                        stopColor="var(--warning-orange)"
+                        stopColor="var(--warning)"
                         stopOpacity={0}
                       />
                     </linearGradient>
@@ -792,12 +792,12 @@ const ProjectionView = ({
                     >
                       <stop
                         offset="5%"
-                        stopColor="var(--primary-blue)"
+                        stopColor="var(--brand-primary)"
                         stopOpacity={0.25}
                       />
                       <stop
                         offset="95%"
-                        stopColor="var(--primary-blue)"
+                        stopColor="var(--brand-primary)"
                         stopOpacity={0}
                       />
                     </linearGradient>
@@ -805,7 +805,7 @@ const ProjectionView = ({
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    stroke="var(--text-secondary)"
+                    stroke="var(--text-muted)"
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
@@ -813,7 +813,7 @@ const ProjectionView = ({
                   />
                   <YAxis
                     yAxisId="left"
-                    stroke="var(--text-secondary)"
+                    stroke="var(--text-muted)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
@@ -825,7 +825,7 @@ const ProjectionView = ({
                     <YAxis
                       yAxisId="right"
                       orientation="right"
-                      stroke="var(--primary-blue)"
+                      stroke="var(--brand-primary)"
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
@@ -834,11 +834,11 @@ const ProjectionView = ({
                   )}
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "var(--card-bg)",
-                      borderColor: "var(--card-border)",
+                      backgroundColor: "var(--bg-card)",
+                      borderColor: "var(--border)",
                       borderRadius: "8px",
                     }}
-                    itemStyle={{ color: "var(--text-primary)" }}
+                    itemStyle={{ color: "var(--text)" }}
                     formatter={(value, name) => [
                       `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                       name,
@@ -852,7 +852,7 @@ const ProjectionView = ({
                     yAxisId="left"
                     type="monotone"
                     dataKey="value"
-                    stroke="var(--warning-orange)"
+                    stroke="var(--warning)"
                     fillOpacity={1}
                     fill="url(#colorProjValue)"
                     strokeWidth={3}
@@ -862,7 +862,7 @@ const ProjectionView = ({
                     yAxisId="left"
                     type="monotone"
                     dataKey="spent"
-                    stroke="var(--primary-purple)"
+                    stroke="var(--brand-accent)"
                     fill="transparent"
                     strokeWidth={2}
                     strokeDasharray="5 5"
@@ -873,7 +873,7 @@ const ProjectionView = ({
                       yAxisId="right"
                       type="monotone"
                       dataKey="dividend"
-                      stroke="var(--primary-blue)"
+                      stroke="var(--brand-primary)"
                       fillOpacity={1}
                       fill="url(#colorProjDiv)"
                       strokeWidth={2}
@@ -886,14 +886,14 @@ const ProjectionView = ({
                         key={m.value}
                         x={m.date}
                         yAxisId="left"
-                        stroke="var(--success-green)"
+                        stroke="var(--success)"
                         strokeDasharray="4 3"
                         strokeWidth={1.5}
                         label={{
                           value: `$${(m.value / 1000).toFixed(0)}k div`,
                           position: "insideTopRight",
                           fontSize: 10,
-                          fill: "var(--success-green)",
+                          fill: "var(--success)",
                           offset: 6,
                         }}
                       />
@@ -902,14 +902,14 @@ const ProjectionView = ({
                     <ReferenceLine
                       x={taperDateLabel}
                       yAxisId="left"
-                      stroke="var(--warning-orange)"
+                      stroke="var(--warning)"
                       strokeDasharray="6 3"
                       strokeWidth={2}
                       label={{
                         value: "Taper",
                         position: "insideTopLeft",
                         fontSize: 10,
-                        fill: "var(--warning-orange)",
+                        fill: "var(--warning)",
                         offset: 6,
                       }}
                     />
@@ -918,14 +918,14 @@ const ProjectionView = ({
                     <ReferenceLine
                       x={targetIncomeHit.date}
                       yAxisId="left"
-                      stroke="#6f46d4"
+                      stroke="var(--chart-8)"
                       strokeDasharray="6 3"
                       strokeWidth={2}
                       label={{
                         value: `$${Math.trunc(targetIncomeValue).toLocaleString()} inc`,
                         position: "insideTopRight",
                         fontSize: 10,
-                        fill: "#6f46d4",
+                        fill: "var(--chart-8)",
                         offset: 6,
                       }}
                     />
@@ -934,14 +934,14 @@ const ProjectionView = ({
                     <ReferenceLine
                       x={decayZeroHit.date}
                       yAxisId="left"
-                      stroke="#007795"
+                      stroke="var(--chart-2)"
                       strokeDasharray="6 3"
                       strokeWidth={2}
                       label={{
                         value: "Inv End",
                         position: "insideTopLeft",
                         fontSize: 10,
-                        fill: "#007795",
+                        fill: "var(--chart-2)",
                         offset: 6,
                       }}
                     />

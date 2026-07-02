@@ -968,13 +968,13 @@ const Dashboard = ({
                       style={{
                         width: "24px",
                         height: "0",
-                        borderTop: "2px dashed var(--primary-blue)",
+                        borderTop: "2px dashed var(--brand-primary)",
                       }}
                     />
                     <span
                       style={{
                         fontSize: "12px",
-                        color: "var(--text-secondary)",
+                        color: "var(--text-muted)",
                       }}
                     >
                       Current Value
@@ -985,14 +985,14 @@ const Dashboard = ({
                       style={{
                         width: "24px",
                         height: "3px",
-                        background: "var(--primary-purple)",
+                        background: "var(--brand-accent)",
                         borderRadius: "2px",
                       }}
                     />
                     <span
                       style={{
                         fontSize: "12px",
-                        color: "var(--text-secondary)",
+                        color: "var(--text-muted)",
                       }}
                     >
                       Total Spent
@@ -1005,14 +1005,14 @@ const Dashboard = ({
                           style={{
                             width: "24px",
                             height: "3px",
-                            background: "var(--success-green)",
+                            background: "var(--success)",
                             borderRadius: "2px",
                           }}
                         />
                         <span
                           style={{
                             fontSize: "12px",
-                            color: "var(--text-secondary)",
+                            color: "var(--text-muted)",
                           }}
                         >
                           Dividends Received
@@ -1023,13 +1023,13 @@ const Dashboard = ({
                           style={{
                             width: "24px",
                             height: "0",
-                            borderTop: "2px dashed var(--warning-orange)",
+                            borderTop: "2px dashed var(--warning)",
                           }}
                         />
                         <span
                           style={{
                             fontSize: "12px",
-                            color: "var(--text-secondary)",
+                            color: "var(--text-muted)",
                           }}
                         >
                           Last Dividend
@@ -1055,12 +1055,12 @@ const Dashboard = ({
                         >
                           <stop
                             offset="5%"
-                            stopColor="var(--primary-purple)"
+                            stopColor="var(--brand-accent)"
                             stopOpacity={0.3}
                           />
                           <stop
                             offset="95%"
-                            stopColor="var(--primary-purple)"
+                            stopColor="var(--brand-accent)"
                             stopOpacity={0}
                           />
                         </linearGradient>
@@ -1075,14 +1075,14 @@ const Dashboard = ({
                         tickFormatter={(ts: number) =>
                           format(new Date(ts), "MMM yyyy")
                         }
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
                       />
                       <YAxis
                         yAxisId="left"
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -1094,7 +1094,7 @@ const Dashboard = ({
                         <YAxis
                           yAxisId="right"
                           orientation="right"
-                          stroke="var(--warning-orange)"
+                          stroke="var(--warning)"
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
@@ -1104,8 +1104,8 @@ const Dashboard = ({
                       )}
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: "var(--card-bg)",
-                          borderColor: "var(--card-border)",
+                          backgroundColor: "var(--bg-card)",
+                          borderColor: "var(--border)",
                           borderRadius: "8px",
                         }}
                         content={({ active, payload, label }) => {
@@ -1117,10 +1117,10 @@ const Dashboard = ({
                             ? point.displayDate
                             : format(new Date(label as number), "MMM d, yyyy");
                           const colorMap: Record<string, string> = {
-                            "Total Spent": "var(--primary-purple)",
-                            "Current Value": "var(--primary-blue)",
-                            "Dividends Received": "var(--success-green)",
-                            "Last Dividend": "var(--warning-orange)",
+                            "Total Spent": "var(--brand-accent)",
+                            "Current Value": "var(--brand-primary)",
+                            "Dividends Received": "var(--success)",
+                            "Last Dividend": "var(--warning)",
                           };
                           const order = hasDividendData
                             ? [
@@ -1140,15 +1140,15 @@ const Dashboard = ({
                           return (
                             <div
                               style={{
-                                backgroundColor: "var(--card-bg)",
-                                border: "1px solid var(--card-border)",
+                                backgroundColor: "var(--bg-card)",
+                                border: "1px solid var(--border)",
                                 borderRadius: "8px",
                                 padding: "10px 14px",
                               }}
                             >
                               <p
                                 style={{
-                                  color: "var(--text-secondary)",
+                                  color: "var(--text-muted)",
                                   fontSize: "12px",
                                   marginBottom: "8px",
                                 }}
@@ -1185,7 +1185,7 @@ const Dashboard = ({
                                     />
                                     <span
                                       style={{
-                                        color: "var(--text-secondary)",
+                                        color: "var(--text-muted)",
                                         fontSize: "13px",
                                       }}
                                     >
@@ -1193,7 +1193,7 @@ const Dashboard = ({
                                     </span>
                                     <span
                                       style={{
-                                        color: "var(--text-primary)",
+                                        color: "var(--text)",
                                         fontSize: "13px",
                                         fontWeight: 600,
                                       }}
@@ -1217,7 +1217,7 @@ const Dashboard = ({
                         yAxisId="left"
                         type="monotone"
                         dataKey="cost"
-                        stroke="var(--primary-purple)"
+                        stroke="var(--brand-accent)"
                         fillOpacity={1}
                         fill="url(#colorCost)"
                         strokeWidth={3}
@@ -1227,7 +1227,7 @@ const Dashboard = ({
                         yAxisId="left"
                         type="monotone"
                         dataKey="value"
-                        stroke="var(--primary-blue)"
+                        stroke="var(--brand-primary)"
                         fill="transparent"
                         strokeWidth={2}
                         strokeDasharray="5 5"
@@ -1239,7 +1239,7 @@ const Dashboard = ({
                             yAxisId="right"
                             type="monotone"
                             dataKey="dividendValue"
-                            stroke="var(--success-green)"
+                            stroke="var(--success)"
                             fill="transparent"
                             strokeWidth={2}
                             name="Dividends Received"
@@ -1248,7 +1248,7 @@ const Dashboard = ({
                             yAxisId="right"
                             type="stepAfter"
                             dataKey="lastDividendAmount"
-                            stroke="var(--warning-orange)"
+                            stroke="var(--warning)"
                             fill="transparent"
                             strokeWidth={2}
                             strokeDasharray="5 5"
@@ -1262,13 +1262,13 @@ const Dashboard = ({
                           key={marker.timestamp}
                           yAxisId="left"
                           x={marker.timestamp}
-                          stroke="#6f46d4"
+                          stroke="var(--chart-8)"
                           strokeDasharray="4 4"
                           label={{
                             value: marker.label,
                             position: "insideTopRight",
                             fontSize: 10,
-                            fill: "#6f46d4",
+                            fill: "var(--chart-8)",
                           }}
                         />
                       ))}
@@ -1310,11 +1310,11 @@ const Dashboard = ({
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed var(--warning-orange)",
+                      borderTop: "2px dashed var(--warning)",
                     }}
                   />
                   <span
-                    style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+                    style={{ fontSize: "12px", color: "var(--text-muted)" }}
                   >
                     Avg: {avgGrowthPct >= 0 ? "+" : ""}
                     {avgGrowthPct}%
@@ -1342,7 +1342,7 @@ const Dashboard = ({
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis
                         dataKey="label"
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -1353,14 +1353,14 @@ const Dashboard = ({
                                 value: "Year",
                                 position: "insideBottom",
                                 offset: -4,
-                                fill: "var(--text-secondary)",
+                                fill: "var(--text-muted)",
                                 fontSize: 12,
                               }
                         }
                       />
                       <YAxis
                         yAxisId="left"
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -1369,7 +1369,7 @@ const Dashboard = ({
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke="#0472e7"
+                        stroke="var(--chart-1)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -1383,20 +1383,20 @@ const Dashboard = ({
                       <ReferenceLine
                         yAxisId="left"
                         y={0}
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         strokeOpacity={0.4}
                       />
                       {avgGrowthPct !== null && (
                         <ReferenceLine
                           yAxisId="left"
                           y={avgGrowthPct}
-                          stroke="var(--warning-orange)"
+                          stroke="var(--warning)"
                           strokeDasharray="5 5"
                           strokeWidth={2}
                         />
                       )}
                       <Tooltip
-                        cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                        cursor={{ fill: "var(--chart-cursor)" }}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
                           const d = payload[0].payload as {
@@ -1415,49 +1415,49 @@ const Dashboard = ({
                             {
                               label: "Current Value",
                               value: `$${d.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                              color: "var(--primary-blue)",
+                              color: "var(--brand-primary)",
                             },
                             {
                               label: "Total Invested",
                               value: `$${d.cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                              color: "var(--primary-purple)",
+                              color: "var(--brand-accent)",
                             },
                             {
                               label: "Gain / Loss",
                               value: `${gain >= 0 ? "+" : ""}$${gain.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                               color:
                                 gain >= 0
-                                  ? "var(--success-green)"
-                                  : "var(--primary-blue)",
+                                  ? "var(--success)"
+                                  : "var(--brand-primary)",
                             },
                             {
                               label: "Gain %",
                               value: `${d.gainPct >= 0 ? "+" : ""}${d.gainPct}%`,
                               color:
                                 d.gainPct >= 0
-                                  ? "var(--success-green)"
-                                  : "var(--primary-blue)",
+                                  ? "var(--success)"
+                                  : "var(--brand-primary)",
                             },
                           ];
                           if (d.deltaValue !== null) {
                             rows.push({
                               label: `${growthUseMonths ? "MoM" : "YoY"} Change`,
                               value: `${d.deltaValue >= 0 ? "+" : ""}$${d.deltaValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                              color: d.deltaValue >= 0 ? "#0472e7" : "#004f89",
+                              color: d.deltaValue >= 0 ? "var(--chart-1)" : "var(--chart-5)",
                             });
                           }
                           return (
                             <div
                               style={{
-                                backgroundColor: "var(--card-bg)",
-                                border: "1px solid var(--card-border)",
+                                backgroundColor: "var(--bg-card)",
+                                border: "1px solid var(--border)",
                                 borderRadius: "8px",
                                 padding: "10px 14px",
                               }}
                             >
                               <p
                                 style={{
-                                  color: "var(--text-secondary)",
+                                  color: "var(--text-muted)",
                                   fontSize: "12px",
                                   marginBottom: "8px",
                                 }}
@@ -1485,7 +1485,7 @@ const Dashboard = ({
                                   />
                                   <span
                                     style={{
-                                      color: "var(--text-secondary)",
+                                      color: "var(--text-muted)",
                                       fontSize: "13px",
                                     }}
                                   >
@@ -1493,7 +1493,7 @@ const Dashboard = ({
                                   </span>
                                   <span
                                     style={{
-                                      color: "var(--text-primary)",
+                                      color: "var(--text)",
                                       fontSize: "13px",
                                       fontWeight: 600,
                                     }}
@@ -1514,7 +1514,7 @@ const Dashboard = ({
                         formatter={(value) => (
                           <span
                             style={{
-                              color: "var(--text-secondary)",
+                              color: "var(--text-muted)",
                               fontSize: "11px",
                             }}
                           >
@@ -1536,8 +1536,8 @@ const Dashboard = ({
                             key={index}
                             fill={
                               entry.gainPct >= 0
-                                ? "var(--success-green)"
-                                : "#6f46d4"
+                                ? "var(--success)"
+                                : "var(--chart-8)"
                             }
                             fillOpacity={0.85}
                           />
@@ -1548,9 +1548,9 @@ const Dashboard = ({
                         dataKey="deltaValue"
                         name={`${growthUseMonths ? "MoM" : "YoY"} $ Change`}
                         type="monotone"
-                        stroke="#0472e7"
+                        stroke="var(--chart-1)"
                         strokeWidth={2}
-                        dot={{ fill: "#0472e7", r: 4, strokeWidth: 0 }}
+                        dot={{ fill: "var(--chart-1)", r: 4, strokeWidth: 0 }}
                         activeDot={{ r: 6 }}
                         connectNulls={false}
                       />
@@ -1578,7 +1578,7 @@ const Dashboard = ({
               >
                 <TrendingDown
                   size={24}
-                  style={{ color: "var(--warning-orange)" }}
+                  style={{ color: "var(--warning)" }}
                 />
                 <h2>Cost Basis</h2>
               </div>
@@ -1595,11 +1595,11 @@ const Dashboard = ({
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed var(--warning-orange)",
+                      borderTop: "2px dashed var(--warning)",
                     }}
                   />
                   <span
-                    style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+                    style={{ fontSize: "12px", color: "var(--text-muted)" }}
                   >
                     Current avg: $
                     {costBasisChartData.total.toLocaleString("en-US", {
@@ -1637,12 +1637,12 @@ const Dashboard = ({
                         >
                           <stop
                             offset="5%"
-                            stopColor="#006b98"
+                            stopColor="var(--chart-4)"
                             stopOpacity={0.25}
                           />
                           <stop
                             offset="95%"
-                            stopColor="#006b98"
+                            stopColor="var(--chart-4)"
                             stopOpacity={0}
                           />
                         </linearGradient>
@@ -1650,13 +1650,13 @@ const Dashboard = ({
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis
                         dataKey="label"
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
                       />
                       <YAxis
-                        stroke="var(--text-secondary)"
+                        stroke="var(--text-muted)"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -1670,13 +1670,13 @@ const Dashboard = ({
                       {costBasisChartData.total > 0 && (
                         <ReferenceLine
                           y={costBasisChartData.total}
-                          stroke="var(--warning-orange)"
+                          stroke="var(--warning)"
                           strokeDasharray="5 5"
                           strokeWidth={2}
                         />
                       )}
                       <Tooltip
-                        cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                        cursor={{ fill: "var(--chart-cursor)" }}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
                           const d = payload[0].payload as {
@@ -1686,15 +1686,15 @@ const Dashboard = ({
                           return (
                             <div
                               style={{
-                                backgroundColor: "var(--card-bg)",
-                                border: "1px solid var(--card-border)",
+                                backgroundColor: "var(--bg-card)",
+                                border: "1px solid var(--border)",
                                 borderRadius: "8px",
                                 padding: "10px 14px",
                               }}
                             >
                               <p
                                 style={{
-                                  color: "var(--text-secondary)",
+                                  color: "var(--text-muted)",
                                   fontSize: "12px",
                                   marginBottom: "8px",
                                 }}
@@ -1713,13 +1713,13 @@ const Dashboard = ({
                                     width: "10px",
                                     height: "10px",
                                     borderRadius: "2px",
-                                    background: "var(--warning-orange)",
+                                    background: "var(--warning)",
                                     flexShrink: 0,
                                   }}
                                 />
                                 <span
                                   style={{
-                                    color: "var(--text-secondary)",
+                                    color: "var(--text-muted)",
                                     fontSize: "13px",
                                   }}
                                 >
@@ -1727,7 +1727,7 @@ const Dashboard = ({
                                 </span>
                                 <span
                                   style={{
-                                    color: "var(--text-primary)",
+                                    color: "var(--text)",
                                     fontSize: "13px",
                                     fontWeight: 600,
                                   }}
@@ -1747,10 +1747,10 @@ const Dashboard = ({
                         type="monotone"
                         dataKey="avgCost"
                         name="Avg Cost / Share"
-                        stroke="#006b98"
+                        stroke="var(--chart-4)"
                         strokeWidth={2}
                         fill="url(#colorCostBasis)"
-                        dot={{ fill: "#006b98", r: 3, strokeWidth: 0 }}
+                        dot={{ fill: "var(--chart-4)", r: 3, strokeWidth: 0 }}
                         activeDot={{ r: 5 }}
                       />
                     </AreaChart>

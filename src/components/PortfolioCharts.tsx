@@ -38,21 +38,21 @@ interface BenchmarkPoint {
 }
 
 const PIE_COLORS = [
-  "#0472e7",
-  "#007795",
-  "#2a36d4",
-  "#006b98",
-  "#004f89",
-  "#10217a",
-  "#0472e7",
-  "#007795",
-  "#2a36d4",
-  "#006b98",
-  "#004f89",
-  "#10217a",
-  "#0472e7",
-  "#007795",
-  "#2a36d4",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-6)",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-6)",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
 ];
 
 interface Pie3DSlice {
@@ -62,7 +62,14 @@ interface Pie3DSlice {
   fill: string;
 }
 
-function darken(hex: string, factor = 0.55): string {
+function darken(colorValue: string, factor = 0.55): string {
+  let hex = colorValue;
+  if (colorValue.startsWith("var(")) {
+    const name = colorValue.slice(4, -1).trim();
+    hex = getComputedStyle(document.documentElement)
+      .getPropertyValue(name)
+      .trim();
+  }
   const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
   const g = Math.round(parseInt(hex.slice(3, 5), 16) * factor);
   const b = Math.round(parseInt(hex.slice(5, 7), 16) * factor);
@@ -164,7 +171,7 @@ function Pie3D({
               key={`side-${slice.name}`}
               d={d}
               fill={darken(slice.fill)}
-              stroke="rgba(0,0,0,0.3)"
+              stroke="var(--chart-shadow-deep)"
               strokeWidth={0.5}
             />
           );
@@ -186,7 +193,7 @@ function Pie3D({
               key={`top-${slice.name}`}
               d={d}
               fill={slice.fill}
-              stroke="rgba(0,0,0,0.15)"
+              stroke="var(--chart-shadow)"
               strokeWidth={0.5}
               onMouseEnter={() => setHovered(slice)}
               onMouseLeave={() => setHovered(null)}
@@ -215,14 +222,14 @@ function Pie3D({
                 y1={ey}
                 x2={lx}
                 y2={ly}
-                stroke="rgba(255,255,255,0.75)"
+                stroke="var(--chart-stroke-white)"
                 strokeWidth={1.2}
               />
               <text
                 x={lx}
                 y={ly - 2}
                 textAnchor={anchor}
-                fill="var(--text-secondary)"
+                fill="var(--text-muted)"
                 fontSize={fontSize}
                 fontWeight={700}
                 fontFamily="inherit"
@@ -240,8 +247,8 @@ function Pie3D({
             position: "absolute",
             left: Math.min(mousePos.x + 12, mousePos.containerWidth - 160),
             top: Math.max(mousePos.y - 44, 4),
-            background: "var(--card-bg)",
-            border: "1px solid var(--card-border)",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             fontSize: "0.8rem",
             padding: "5px 10px",
@@ -250,11 +257,11 @@ function Pie3D({
             whiteSpace: "nowrap",
           }}
         >
-          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+          <span style={{ color: "var(--text)", fontWeight: 600 }}>
             {hovered.name}
           </span>
           <br />
-          <span style={{ color: "var(--text-secondary)" }}>
+          <span style={{ color: "var(--text-muted)" }}>
             {hovered.pct}% ·{" "}
             {`$${hovered.marketValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
           </span>
@@ -306,7 +313,7 @@ const pieCardStyle: React.CSSProperties = {
 const chartTitleStyle: React.CSSProperties = {
   fontSize: "0.95rem",
   fontWeight: 600,
-  color: "var(--text-primary)",
+  color: "var(--text)",
   marginBottom: "0.25rem",
 };
 
@@ -385,7 +392,12 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     name: d.name,
     pct: Math.round((d.value / totalPieValue) * 1000) / 10,
     marketValue: d.value,
-    fill: d.name === "Other" ? "#1a2a5e" : i === 0 ? "#6f46d4" : PIE_COLORS[(i - 1) % PIE_COLORS.length],
+    fill:
+      d.name === "Other"
+        ? "var(--data-peripheral)"
+        : i === 0
+          ? "var(--data-supreme)"
+          : PIE_COLORS[(i - 1) % PIE_COLORS.length],
   }));
 
   // --- Chart 2: thin history ---
@@ -418,7 +430,12 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
 
   const dividendData: DividendDataPoint[] = dividendsByTicker ?? [];
 
-  const DIV_COLORS = ["#0472e7", "#006b98", "#004f89", "#00a8c8"];
+  const DIV_COLORS = [
+    "var(--chart-1)",
+    "var(--chart-4)",
+    "var(--chart-5)",
+    "var(--chart-7)",
+  ];
 
   const loading =
     history === null || monthlyDivs === null || dividendsByTicker === null;
@@ -488,14 +505,16 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             const diff = lastBench.portfolioAnn - lastBench.spyAnn;
             const portColor =
               lastBench.portfolioAnn >= 0
-                ? "var(--success-green)"
-                : "var(--primary-blue)";
+                ? "var(--success)"
+                : "var(--brand-primary)";
             const spyColor =
-              lastBench.spyAnn >= 0 ? "#004f89" : "var(--primary-blue)";
+              lastBench.spyAnn >= 0 ? "var(--chart-5)" : "var(--brand-primary)";
             const nasdaqColor =
-              lastBench.nasdaqAnn >= 0 ? "#007795" : "var(--primary-blue)";
+              lastBench.nasdaqAnn >= 0
+                ? "var(--success)"
+                : "var(--brand-primary)";
             const diffColor =
-              diff >= 0 ? "var(--success-green)" : "var(--primary-blue)";
+              diff >= 0 ? "var(--success)" : "var(--brand-primary)";
             const badge = (val: number, color: string, label: string) => (
               <span
                 style={{
@@ -524,7 +543,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         <span
           style={{
             fontSize: "0.72rem",
-            color: "var(--text-secondary)",
+            color: "var(--text-muted)",
             marginLeft: "auto",
           }}
         >
@@ -537,7 +556,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         </div>
       ) : benchmarkPoints.length === 0 ? (
         <div style={spinnerWrapStyle}>
-          <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
             No benchmark data available — try refreshing the page.
           </span>
         </div>
@@ -549,18 +568,18 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
           >
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="rgba(255,255,255,0.06)"
+              stroke="var(--chart-stroke-faint)"
             />
             <XAxis
               dataKey="month"
               tickFormatter={fmtMonth}
-              tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 10 }}
               interval="preserveStartEnd"
               minTickGap={40}
             />
             <YAxis
               tickFormatter={(v) => `${v >= 0 ? "+" : ""}${v}%`}
-              tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 10 }}
               width={52}
               domain={annDomain}
             />
@@ -573,8 +592,8 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 name,
               ]}
               contentStyle={{
-                background: "var(--card-bg)",
-                border: "1px solid var(--card-border)",
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
                 borderRadius: 8,
                 fontSize: "0.8rem",
               }}
@@ -582,7 +601,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             <Legend wrapperStyle={{ fontSize: "0.75rem", paddingTop: 4 }} />
             <ReferenceLine
               y={0}
-              stroke="rgba(255,255,255,0.4)"
+              stroke="var(--chart-stroke-mid)"
               strokeWidth={1}
               strokeDasharray="4 2"
             />
@@ -590,7 +609,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               type="monotone"
               dataKey="portfolioAnn"
               name="Portfolio Ann%"
-              stroke="#6f46d4"
+              stroke="var(--chart-8)"
               dot={false}
               strokeWidth={2.5}
             />
@@ -598,7 +617,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               type="monotone"
               dataKey="spyAnn"
               name="SPY Ann%"
-              stroke="#004f89"
+              stroke="var(--chart-5)"
               dot={false}
               strokeWidth={2}
               strokeDasharray="4 2"
@@ -607,7 +626,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               type="monotone"
               dataKey="nasdaqAnn"
               name="Nasdaq Ann%"
-              stroke="#007795"
+              stroke="var(--chart-2)"
               dot={false}
               strokeWidth={2}
               strokeDasharray="6 3"
@@ -648,7 +667,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               fontWeight: 700,
               padding: "2px 8px",
               borderRadius: 6,
-              color: val >= 0 ? "#007795" : "#0472e7",
+              color: val >= 0 ? "var(--success)" : "var(--brand-primary)",
               background:
                 val >= 0 ? "rgba(0,119,149,0.12)" : "rgba(4,114,231,0.12)",
               border: `1px solid ${val >= 0 ? "rgba(0,119,149,0.3)" : "rgba(4,114,231,0.3)"}`,
@@ -681,12 +700,13 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
           const projectedAnnual = pgotCurrentValue * (pgotCagr / 100);
           const projectedMonthly = projectedAnnual / 12;
           const projectedDaily = projectedAnnual / 365;
-          const color = pgotCagr >= 0 ? "#007795" : "#0472e7";
+          const color =
+            pgotCagr >= 0 ? "var(--success)" : "var(--brand-primary)";
           return (
             <div
               style={{
                 fontSize: "0.82rem",
-                color: "var(--text-secondary)",
+                color: "var(--text-muted)",
                 marginBottom: "0.25rem",
               }}
             >
@@ -695,27 +715,27 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 {projectedAnnual.toLocaleString("en-US", {
                   maximumFractionDigits: 0,
                 })}{" "}
-                / yr
+                yr
               </span>
-              <span style={{ color: "var(--text-secondary)", margin: "0 6px" }}>
+              <span style={{ color: "var(--text-muted)", margin: "0 6px" }}>
                 |
               </span>
               <span style={{ fontWeight: 700, color }}>
                 $
                 {projectedMonthly.toLocaleString("en-US", {
                   maximumFractionDigits: 0,
-                })}
-                / mo
+                })}{" "}
+                mo
               </span>
-              <span style={{ color: "var(--text-secondary)", margin: "0 6px" }}>
+              <span style={{ color: "var(--text-muted)", margin: "0 6px" }}>
                 |
               </span>
               <span style={{ fontWeight: 700, color }}>
                 $
                 {projectedDaily.toLocaleString("en-US", {
                   maximumFractionDigits: 0,
-                })}
-                / day
+                })}{" "}
+                day
               </span>
             </div>
           );
@@ -726,7 +746,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         </div>
       ) : thinHistory.length === 0 ? (
         <div style={spinnerWrapStyle}>
-          <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
             No history data
           </span>
         </div>
@@ -742,19 +762,19 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.06)"
+                stroke="var(--chart-stroke-faint)"
               />
               <XAxis
                 dataKey="month"
                 tickFormatter={fmtMonth}
-                tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 interval="preserveStartEnd"
                 minTickGap={40}
               />
               <YAxis
                 yAxisId="left"
                 tickFormatter={fmtDollar}
-                tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 width={52}
               />
               <ReTooltip
@@ -766,8 +786,8 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   name,
                 ]}
                 contentStyle={{
-                  background: "var(--card-bg)",
-                  border: "1px solid var(--card-border)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
                   borderRadius: 8,
                   fontSize: "0.8rem",
                 }}
@@ -776,7 +796,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               <ReferenceLine
                 yAxisId="left"
                 y={0}
-                stroke="rgba(255,255,255,0.6)"
+                stroke="var(--chart-stroke-bright)"
                 strokeWidth={2}
               />
               <Line
@@ -784,7 +804,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 type="monotone"
                 dataKey="totalValue"
                 name="Portfolio Value"
-                stroke="#6f46d4"
+                stroke="var(--chart-8)"
                 dot={false}
                 strokeWidth={2}
               />
@@ -793,7 +813,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 type="monotone"
                 dataKey="totalInvested"
                 name="Net Invested"
-                stroke="#0472e7"
+                stroke="var(--chart-1)"
                 dot={false}
                 strokeWidth={2}
                 strokeDasharray="4 2"
@@ -803,7 +823,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 type="monotone"
                 dataKey="pnl"
                 name="Mkt Gain"
-                stroke="#006b98"
+                stroke="var(--chart-4)"
                 dot={false}
                 strokeWidth={2}
                 strokeDasharray="2 2"
@@ -833,12 +853,12 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
           const projAnnual = lastTotal * 12;
           const projMonthly = lastTotal;
           const projDaily = projAnnual / 365;
-          const color = "#007795";
+          const color = "var(--success)";
           return (
             <div
               style={{
                 fontSize: "0.82rem",
-                color: "var(--text-secondary)",
+                color: "var(--text-muted)",
                 marginBottom: "0.25rem",
               }}
             >
@@ -848,8 +868,8 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   maximumFractionDigits: 0,
                 })}
               </span>{" "}
-              / yr
-              <span style={{ color: "var(--text-secondary)", margin: "0 6px" }}>
+              yr
+              <span style={{ color: "var(--text-muted)", margin: "0 6px" }}>
                 |
               </span>
               <span style={{ fontWeight: 700, color }}>
@@ -858,8 +878,8 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   maximumFractionDigits: 0,
                 })}
               </span>{" "}
-              / mo
-              <span style={{ color: "var(--text-secondary)", margin: "0 6px" }}>
+              mo
+              <span style={{ color: "var(--text-muted)", margin: "0 6px" }}>
                 |
               </span>
               <span style={{ fontWeight: 700, color }}>
@@ -868,7 +888,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   maximumFractionDigits: 0,
                 })}
               </span>{" "}
-              / day
+              day
             </div>
           );
         })()}
@@ -878,7 +898,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         </div>
       ) : dividendData.length === 0 ? (
         <div style={spinnerWrapStyle}>
-          <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
             No dividend data
           </span>
         </div>
@@ -894,18 +914,18 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.06)"
+                stroke="var(--chart-stroke-faint)"
               />
               <XAxis
                 dataKey="month"
                 tickFormatter={fmtMonth}
-                tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 interval="preserveStartEnd"
                 minTickGap={40}
               />
               <YAxis
                 tickFormatter={(v) => `$${v}`}
-                tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 width={44}
               />
               <ReTooltip
@@ -917,8 +937,8 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   name,
                 ]}
                 contentStyle={{
-                  background: "var(--card-bg)",
-                  border: "1px solid var(--card-border)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
                   borderRadius: 8,
                   fontSize: "0.8rem",
                 }}
@@ -940,7 +960,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 type="monotone"
                 dataKey="total"
                 name="Mo. Total"
-                stroke="#6f46d4"
+                stroke="var(--chart-8)"
                 dot={false}
                 strokeWidth={2.5}
                 strokeDasharray="4 2"
@@ -962,7 +982,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             style={{
               fontSize: "1.35rem",
               fontWeight: 700,
-              color: "#327390",
+              color: "var(--text-muted)",
               letterSpacing: "-0.01em",
               lineHeight: 1.1,
             }}
@@ -975,9 +995,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         )}
         {radialData.length === 0 ? (
           <div style={spinnerWrapStyle}>
-            <span
-              style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}
-            >
+            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
               No holdings data
             </span>
           </div>
@@ -1001,7 +1019,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 <span
                   key={d.name}
                   style={{
-                    color: "var(--text-secondary)",
+                    color: "var(--text-muted)",
                     display: "flex",
                     alignItems: "center",
                     gap: 4,
@@ -1102,7 +1120,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             position: "fixed",
             inset: 0,
             zIndex: 9999,
-            background: "rgba(0,0,0,0.65)",
+            background: "var(--bg-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1118,7 +1136,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               overflow: "auto",
               padding: "1.5rem 1.5rem 1rem",
               boxShadow:
-                "0 32px 96px rgba(0,0,0,0.85), 0 0 40px rgba(4, 114, 231, 0.26)",
+                "0 32px 96px var(--bg-overlay-deep), 0 0 40px var(--shadow-overlay)",
               position: "relative",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1129,13 +1147,13 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 position: "absolute",
                 top: "1rem",
                 right: "1rem",
-                background: "rgba(255,255,255,0.08)",
+                background: "var(--bg-input-focus)",
                 border: "1px solid rgba(255,255,255,0.15)",
                 borderRadius: "50%",
                 width: "2rem",
                 height: "2rem",
                 cursor: "pointer",
-                color: "var(--text-secondary)",
+                color: "var(--text-muted)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

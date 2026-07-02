@@ -1,19 +1,158 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap');
 
 :root {
-  --bg-color: #020810;
-  --card-bg: rgba(4, 8, 28, 0.88);
-  --card-border: rgba(4, 114, 231, 0.14);
-  --primary-purple: #6f46d4;
-  --primary-blue: #0472e7;
-  --success-green: #007795;
-  --warning-orange: #006b98;
-  --danger-red: #6f46d4;
-  --text-primary: #d4e4f8;
-  --text-secondary: #5a7a9a;
-  --glass-bg: rgba(4, 114, 231, 0.02);
-  --glass-blur: blur(12px);
-  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* =======================================================
+     DATA DISPLAY PALETTE
+     Pure hex values for charts and visualizations.
+     Ordered by visual prominence (most → least):
+       Supreme → Paramount → Dominant → Principal →
+       Major → Minor → Subordinate → Peripheral
+     ======================================================= */
+
+  --data-supreme: #6f46d4;
+  --data-paramount: #0472e7;
+  --data-dominant: #007795;
+  --data-principal: #006b98;
+  --data-major: #00a8c8;
+  --data-minor: #2ad42a;
+  --data-subordinate: #4895cb;
+  --data-peripheral: #10217a;
+
+
+  /* =======================================================
+     INTERFACE PALETTE
+     Named by role. Independent from data colors above.
+     ======================================================= */
+
+  /* Brand */
+  --brand-primary: #0472e7;
+  /* blue — buttons, links, focus rings */
+  --brand-accent: rgb(29, 121, 175);
+  /* purple — highlights, spinner, icons */
+
+  /* Status */
+  --success: #007795;
+  --warning: #006b98;
+  --danger: #fe1616;
+  /* purple — no red in this palette */
+  --caution: #f59e0b;
+  /* amber */
+
+  /* Text */
+  --text: #d4e4f8;
+  --text-muted: #5a7a9a;
+  --text-faint: #94a3b8;
+  --text-on-dark: #ffffff;
+  --text-danger: #ff0055;
+  /* lavender — on danger badge surfaces */
+  --text-danger-hover: #ff0f6b;
+  /* lighter lavender — delete hover state */
+  --text-danger-soft: #f23535;
+  /* soft purple — muted danger menu items */
+
+  /* Surfaces */
+  --surface-bg: #020810;
+  --surface-abyss: #04081c;
+  /* card/panel base color */
+
+  /* Neutral */
+  --neutral: #94a3b8;
+
+
+  /* =======================================================
+     SEMANTIC TOKENS
+     Named by purpose. All rgba values are written inline
+     here (single source of truth). Components use only
+     var(--name) — never raw rgba or hex.
+     ======================================================= */
+
+  /* — Backgrounds — */
+  --bg: var(--surface-bg);
+  --bg-card: rgba(4, 8, 28, 0.88);
+  /* surface-abyss @ 88% */
+  --bg-glass: rgba(4, 114, 231, 0.02);
+  /* brand-primary @ 2% */
+  --bg-navbar: rgba(2, 8, 16, 0.92);
+  /* surface-bg @ 92% */
+  --bg-overlay: rgba(0, 0, 0, 0.65);
+  --bg-overlay-deep: rgba(0, 0, 0, 0.85);
+  --bg-scrim: rgba(17, 19, 31, 0.70);
+  /* tooltip / modal panel */
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --bg-input-focus: rgba(255, 255, 255, 0.08);
+  --bg-btn-secondary: rgba(255, 255, 255, 0.07);
+  --bg-btn-hover: rgba(255, 255, 255, 0.12);
+  --bg-row-hover: rgba(255, 255, 255, 0.02);
+  --bg-row-total: rgba(255, 255, 255, 0.04);
+  --bg-dropdown-hover: rgba(4, 114, 231, 0.10);
+  --bg-success: rgba(0, 119, 149, 0.15);
+  --bg-warning: rgba(0, 107, 152, 0.15);
+  --bg-danger: rgba(69, 10, 189, 0.18);
+  --bg-neutral: rgba(148, 163, 184, 0.15);
+  --bg-caution: rgba(245, 158, 11, 0.10);
+
+  /* — Borders — */
+  --border: rgba(4, 114, 231, 0.14);
+  /* default card/panel border */
+  --border-hover: rgba(4, 114, 231, 0.32);
+  --border-active: rgba(4, 114, 231, 0.20);
+  /* menu / modal border */
+  --border-subtle: rgba(255, 255, 255, 0.03);
+  --border-divider: rgba(255, 255, 255, 0.10);
+  --border-divider-strong: rgba(255, 255, 255, 0.20);
+  --border-success: rgba(0, 119, 149, 0.40);
+  --border-warning: rgba(0, 107, 152, 0.40);
+  --border-danger: rgba(69, 10, 189, 0.40);
+  --border-danger-hover: rgba(69, 10, 189, 0.35);
+  --border-caution: rgba(245, 158, 11, 0.40);
+
+  /* — Shadows — */
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.40), 0 0 18px rgba(4, 114, 231, 0.45);
+  --shadow-card-hover: 0 12px 48px rgba(0, 0, 0, 0.60), 0 0 20px rgba(4, 114, 231, 0.45);
+  --shadow-glow-color: rgba(4, 114, 231, 0.45);
+  /* for btn/filter glow */
+  --shadow-overlay: rgba(4, 114, 231, 0.26);
+  /* tooltip box-shadow tint */
+  --shadow-mid: rgba(0, 0, 0, 0.50);
+  /* modal / dropdown shadow */
+
+  /* — Chart color assignments (reference data palette) — */
+  --chart-1: var(--data-paramount);
+  /* #0472e7 */
+  --chart-2: var(--data-dominant);
+  /* #007795 */
+  --chart-3: var(--data-minor);
+  /* #2a36d4 */
+  --chart-4: var(--data-principal);
+  /* #006b98 */
+  --chart-5: var(--data-subordinate);
+  /* #004f89 */
+  --chart-6: var(--data-peripheral);
+  /* #10217a */
+  --chart-7: var(--data-major);
+  /* #00a8c8 */
+  --chart-8: var(--data-supreme);
+  /* #6f46d4 */
+
+  /* — Chart overlays (used across multiple chart components) — */
+  --chart-cursor: rgba(255, 255, 255, 0.05);
+  --chart-grid: rgba(255, 255, 255, 0.05);
+  --chart-stroke-faint: rgba(255, 255, 255, 0.06);
+  --chart-stroke-mid: rgba(255, 255, 255, 0.40);
+  --chart-stroke-bright: rgba(255, 255, 255, 0.60);
+  --chart-stroke-white: rgba(255, 255, 255, 0.75);
+  --chart-shadow: rgba(0, 0, 0, 0.15);
+  --chart-shadow-deep: rgba(0, 0, 0, 0.30);
+
+  /* — Body gradients — */
+  --gradient-blue: rgba(4, 114, 231, 0.07);
+  --gradient-teal: rgba(0, 119, 149, 0.05);
+
+  /* — Effects — */
+  --blur-glass: blur(12px);
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
 }
 
 * {
@@ -25,12 +164,12 @@
 }
 
 body {
-  background-color: var(--bg-color);
-  color: var(--text-primary);
+  background-color: var(--bg);
+  color: var(--text);
   font-family: 'Inter', sans-serif;
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(4, 114, 231, 0.07) 0%, transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(0, 119, 149, 0.05) 0%, transparent 40%);
+    radial-gradient(circle at 20% 20%, var(--gradient-blue) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, var(--gradient-teal) 0%, transparent 40%);
 }
 
 h1,
@@ -51,8 +190,8 @@ h4 {
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: var(--primary-purple);
+  border: 3px solid var(--border-divider);
+  border-top-color: var(--brand-accent);
   border-radius: 50%;
   animation: spin 0.75s linear infinite;
 }
@@ -74,20 +213,20 @@ h4 {
 }
 
 .glass-card {
-  background: var(--card-bg);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--card-border);
+  background: var(--bg-card);
+  backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 10px 10px 10px 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 18px rgba(4, 114, 231, 0.45);
-  transition: var(--transition-smooth);
+  box-shadow: var(--shadow-card);
+  transition: var(--transition);
   margin-bottom: 10px;
   overflow: hidden;
 }
 
 .glass-card:hover {
-  border-color: rgba(4, 114, 231, 0.32);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 20px rgba(4, 114, 231, 0.46);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .glass-card:focus,
@@ -104,7 +243,7 @@ h4 {
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition);
   border: none;
   font-family: 'Inter', sans-serif;
   display: inline-flex;
@@ -113,30 +252,30 @@ h4 {
 }
 
 .btn-primary {
-  background: var(--primary-purple);
-  color: white;
+  background: var(--brand-accent);
+  color: var(--text-on-dark);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-secondary);
-  border: 1px solid var(--card-border);
+  background: var(--bg-btn-secondary);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text-primary);
+  background: var(--bg-btn-hover);
+  color: var(--text);
 }
 
 .btn-primary:hover {
   filter: brightness(1.15);
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(4, 114, 231, 0.45);
+  box-shadow: 0 4px 20px var(--shadow-glow-color);
 }
 
 .dropdown-item:hover {
-  background: rgba(4, 114, 231, 0.1) !important;
-  color: var(--text-primary) !important;
+  background: var(--bg-dropdown-hover) !important;
+  color: var(--text) !important;
 }
 
 .dropdown-item:disabled {
@@ -156,27 +295,27 @@ h4 {
 
 .input-group label {
   font-size: 0.875rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 input,
 select {
   width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--card-border);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem;
-  color: white;
+  color: var(--text-on-dark);
   font-family: 'Inter', sans-serif;
-  transition: var(--transition-smooth);
+  transition: var(--transition);
 }
 
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--primary-purple);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--brand-accent);
+  background: var(--bg-input-focus);
 }
 
 table {
@@ -189,10 +328,10 @@ table {
 th {
   text-align: left;
   padding: 0.5rem 0.125rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-weight: 600;
   font-size: 0.875rem;
-  border-bottom: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--border);
 }
 
 th:last-child,
@@ -204,7 +343,7 @@ td:last-child {
 
 td {
   padding: 0.15rem 0.125rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.8125rem;
   line-height: 1.3;
   overflow: hidden;
@@ -221,13 +360,13 @@ td {
 }
 
 tr.month-divider td {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 0 var(--border-divider-strong);
   padding-top: 0.6rem;
 }
 
 tr.month-total-row td {
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  background: var(--bg-row-total);
+  box-shadow: inset 0 1px 0 var(--border-divider), inset 0 -1px 0 var(--border-divider);
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
 }
@@ -237,32 +376,32 @@ tr.month-total-row td {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .month-total-value {
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-on-dark);
 }
 
 tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-row-hover);
 }
 
 .text-accent-purple {
-  color: var(--primary-purple);
+  color: var(--brand-accent);
 }
 
 .text-accent-blue {
-  color: var(--primary-blue);
+  color: var(--brand-primary);
 }
 
 .text-accent-green {
-  color: var(--success-green);
+  color: var(--success);
 }
 
 .text-accent-orange {
-  color: var(--warning-orange);
+  color: var(--warning);
 }
 
 .badge {
@@ -274,34 +413,34 @@ tr:hover td {
 }
 
 .badge-success {
-  background: rgba(0, 119, 149, 0.15);
-  color: var(--success-green);
+  background: var(--bg-success);
+  color: var(--success);
 }
 
 .badge-warning {
-  background: rgba(0, 107, 152, 0.15);
-  color: var(--warning-orange);
+  background: var(--bg-warning);
+  color: var(--warning);
 }
 
 .badge-danger {
-  background: rgba(69, 10, 189, 0.18);
-  color: #c8aaff;
+  background: var(--bg-danger);
+  color: var(--text-danger);
 }
 
 .badge-secondary {
-  background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
+  background: var(--bg-neutral);
+  color: var(--text-faint);
 }
 
 /* Recharts Customization */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
-  stroke: rgba(255, 255, 255, 0.05);
+  stroke: var(--chart-grid);
 }
 
 .recharts-default-tooltip {
-  background-color: var(--card-bg) !important;
-  border: 1px solid var(--card-border) !important;
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 8px !important;
   backdrop-filter: blur(8px);
 }
@@ -331,20 +470,20 @@ tr:hover td {
 }
 
 .input-adjunct-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--card-border);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-left: none;
   border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;
   padding: 0 0.75rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition);
 }
 
 .input-adjunct-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--bg-btn-secondary);
+  color: var(--text-on-dark);
 }
 
 .accordion-header {
@@ -354,8 +493,8 @@ tr:hover td {
   justify-content: space-between;
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--card-border);
-  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
   cursor: pointer;
   padding: 0 0 12px 0;
   margin-bottom: 1.5rem;
@@ -364,37 +503,38 @@ tr:hover td {
 }
 
 .accordion-header h2 {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: 1.2rem;
 }
 
 .accordion-header:hover h2 {
-  color: #ffffff;
+  color: var(--text-on-dark);
 }
 
 .btn-delete {
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.5rem;
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
-  transition: var(--transition-smooth);
+  transition: var(--transition);
 }
 
 .btn-delete:hover {
-  color: #d4b8ff;
-  background: rgba(69, 10, 189, 0.18);
-  border: 1px solid rgba(69, 10, 189, 0.35);
+  color: var(--text-danger-hover);
+  background: var(--bg-danger);
+  border: 1px solid var(--border-danger-hover);
 }
 
 @media (max-width: 767px) {
   .charts-row {
     flex-direction: column !important;
   }
-  .charts-row > * {
+
+  .charts-row>* {
     flex: 1 1 100% !important;
     width: 100% !important;
   }

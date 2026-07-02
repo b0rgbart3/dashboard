@@ -71,7 +71,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
         grandTotalValue = adjSharesLast * lastPrice;
         grandTotalGainLoss = grandTotalValue - totalSpentMap[lastChronEntry.id];
     }
-    const grandGlColor = grandTotalGainLoss >= 0 ? 'var(--success-green)' : 'var(--primary-blue)';
+    const grandGlColor = grandTotalGainLoss >= 0 ? 'var(--success)' : 'var(--brand-primary)';
 
     if (purchases.length === 0) {
         return (
@@ -82,7 +82,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
     }
 
     const adjTag = (
-        <span style={{ fontSize: '0.58rem', color: 'var(--text-secondary)', marginLeft: '3px', verticalAlign: 'middle' }}>
+        <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginLeft: '3px', verticalAlign: 'middle' }}>
             adj
         </span>
     );
@@ -145,19 +145,19 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                         <td>
                                             <span
                                                 className="badge"
-                                                style={{ background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)', fontSize: '0.7rem', padding: '2px 8px' }}
+                                                style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)', border: '1px solid var(--border-danger)', fontSize: '0.7rem', padding: '2px 8px' }}
                                             >
                                                 {ratioLabel}
                                             </span>
                                         </td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
+                                        <td style={{ color: 'var(--text-muted)' }}>—</td>
                                         <td className="text-right">
                                             <button onClick={() => onDelete(p.id)} className="btn-delete" title="Delete Entry">
                                                 <Trash2 size={16} />
@@ -184,7 +184,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                         const currentValue = adjShares * lastPrice;
                         const gainLoss     = currentValue - totalSpentMap[p.id];
                         const gainLossPct  = totalSpentMap[p.id] > 0 ? (gainLoss / totalSpentMap[p.id]) * 100 : 0;
-                        const glColor      = gainLoss >= 0 ? 'var(--success-green)' : 'var(--primary-blue)';
+                        const glColor      = gainLoss >= 0 ? 'var(--success)' : 'var(--brand-primary)';
 
                         return (
                             <Fragment key={p.id}>
@@ -203,19 +203,19 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                             }
                                             style={
                                                 isReceiveType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,119,149,0.15)', color: '#007795', border: '1px solid rgba(0,119,149,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-success)', color: 'var(--success)', border: '1px solid var(--border-success)' }
                                                     : isExchangeOutType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-danger)', color: 'var(--text-danger)', border: '1px solid var(--border-danger)' }
                                                     : isRocType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,119,149,0.12)', color: '#007795', border: '1px solid rgba(0,119,149,0.35)', whiteSpace: 'nowrap' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-success)', color: 'var(--success)', border: '1px solid var(--border-success)', whiteSpace: 'nowrap' }
                                                     : isFeeType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,107,152,0.15)', color: '#006b98', border: '1px solid rgba(0,107,152,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-warning)', color: 'var(--warning)', border: '1px solid var(--border-warning)' }
                                                     : p.type === 'MRGS'
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-danger)', color: 'var(--text-danger)', border: '1px solid var(--border-danger)' }
                                                     : p.type === 'MRGC'
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,119,149,0.12)', color: '#007795', border: '1px solid rgba(0,119,149,0.35)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-success)', color: 'var(--success)', border: '1px solid var(--border-success)' }
                                                     : p.type === 'MRGC_MERGER'
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'var(--bg-danger)', color: 'var(--text-danger)', border: '1px solid var(--border-danger)' }
                                                     : { fontSize: '0.7rem', padding: '2px 8px' }
                                             }
                                         >
@@ -259,12 +259,12 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                     </td>
                                     <td className="font-bold text-accent-purple">
                                         {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
-                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            ? <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             : `$${totalSpentMap[p.id].toLocaleString(undefined, numFmt)}`}
                                     </td>
                                     <td className="font-mono">
                                         {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
-                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            ? <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             : <>
                                                 {adjShares.toLocaleString(undefined, numFmt)}
                                                 {isAdjusted && adjTag}
@@ -272,17 +272,17 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                     </td>
                                     <td className="font-bold text-accent-blue">
                                         {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
-                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            ? <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                                     </td>
                                     <td className="font-bold" style={{ color: (p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type)) ? undefined : glColor }}>
                                         {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
-                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            ? <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             : `${gainLoss >= 0 ? '+' : '-'}$${Math.abs(gainLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                                     </td>
                                     <td style={{ color: (p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type)) ? undefined : glColor }}>
                                         {(p.type === 'SLIP' || isFeeType(p.type) || isMarginType(p.type) || isRocType(p.type))
-                                            ? <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                            ? <span style={{ color: 'var(--text-muted)' }}>—</span>
                                             : `${gainLoss >= 0 ? '+' : ''}${gainLossPct.toFixed(1)}%`}
                                     </td>
                                     <td className="text-right">
@@ -303,8 +303,8 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                     })}
                 </tbody>
                 <tfoot>
-                    <tr style={{ borderTop: '2px solid rgba(255,255,255,0.2)' }}>
-                        <td colSpan={7} style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
+                    <tr style={{ borderTop: '2px solid var(--border-divider-strong)' }}>
+                        <td colSpan={7} style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
                             Grand Total
                         </td>
                         <td className="font-bold text-accent-blue" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
