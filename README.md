@@ -1,6 +1,8 @@
 # Portfolio Dashboard
 
-A stock tracking dashboard for monitoring purchases, dividends, and projecting future portfolio value.
+A personal stock tracking dashboard for monitoring purchases, dividends, and projecting future portfolio value.
+
+![Transaction History](screenshot4.jpg)
 
 ## Features
 
