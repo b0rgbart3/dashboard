@@ -5,12 +5,23 @@ import type { FilterValue, Stock, StockSummary, Transaction, ProjectionSettings 
 import './index.css'
 
 function App() {
-  const [page, setPage] = useState<'home' | 'dashboard'>('home')
+  const initialHash = window.location.hash.slice(1).toUpperCase() || undefined
+  const [page, setPage] = useState<'home' | 'dashboard'>(initialHash ? 'dashboard' : 'home')
   const [homeMessage, setHomeMessage] = useState<string | null>(null)
-  const [dashboardTicker, setDashboardTicker] = useState<string | undefined>(undefined)
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active')
-  const [filterValue, setFilterValue] = useState<FilterValue>('gt1000')
-  const [filterDividends, setFilterDividends] = useState<'all' | 'yes' | 'no'>('all')
+  const [dashboardTicker, setDashboardTicker] = useState<string | undefined>(initialHash)
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>(
+    () => (localStorage.getItem('filterStatus') as 'all' | 'active' | 'inactive') ?? 'active'
+  )
+  const [filterValue, setFilterValue] = useState<FilterValue>(
+    () => (localStorage.getItem('filterValue') as FilterValue) ?? 'gt1000'
+  )
+  const [filterDividends, setFilterDividends] = useState<'all' | 'yes' | 'no'>(
+    () => (localStorage.getItem('filterDividends') as 'all' | 'yes' | 'no') ?? 'all'
+  )
+
+  useEffect(() => { localStorage.setItem('filterStatus', filterStatus) }, [filterStatus])
+  useEffect(() => { localStorage.setItem('filterValue', filterValue) }, [filterValue])
+  useEffect(() => { localStorage.setItem('filterDividends', filterDividends) }, [filterDividends])
 
   const [stocks, setStocks] = useState<Stock[]>([])
   const [summaries, setSummaries] = useState<Record<string, StockSummary>>({})

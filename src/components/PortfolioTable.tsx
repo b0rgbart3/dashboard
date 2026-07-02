@@ -73,7 +73,7 @@ const PortfolioTable = ({
         <div style={styles.emptyStateMessage}>No stocks match the current filters.</div>
       )}
       {tableRows.length > 0 && (
-        <div className="glass-card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="glass-card" style={{ padding: "0 20px", overflow: "hidden" }}>
           <table style={styles.summaryTable}>
             <thead>
               <tr style={styles.tableHeaderRow}>
@@ -93,11 +93,11 @@ const PortfolioTable = ({
             </thead>
             <tbody>
               {tableRows.map((row, i) => {
-                const gainColor = row.totalGain > 5000 ? "#00ff88" : row.totalGain >= 0 ? "var(--success-green)" : "#ef4444";
+                const gainColor = row.totalGain >= 0 ? "var(--success-green)" : "var(--primary-blue)";
                 const ratingColor = row.rating === null ? "var(--text-secondary)"
                   : row.rating >= 7 ? "var(--success-green)"
-                  : row.rating >= 4 ? "#f59e0b"
-                  : "#ef4444";
+                  : row.rating >= 4 ? "var(--warning-orange)"
+                  : "var(--primary-blue)";
                 return (
                   <tr
                     key={row.ticker}
@@ -119,10 +119,10 @@ const PortfolioTable = ({
                     <td style={styles.annualGainCell(gainColor)}>
                       {row.gainPct >= 0 ? "+" : ""}{row.gainPct.toFixed(1)}%
                     </td>
-                    <td style={styles.annualGainCell(row.ytdGainPct >= 0 ? "var(--success-green)" : "#ef4444")}>
+                    <td style={styles.annualGainCell(row.ytdGainPct >= 0 ? "var(--success-green)" : "var(--primary-blue)")}>
                       {row.ytdGainPct >= 0 ? "+" : ""}{row.ytdGainPct.toFixed(1)}%
                     </td>
-                    <td style={styles.annualGainCell(row.annualGainPct == null ? "var(--text-secondary)" : row.annualGainPct >= 0 ? gainColor : "#ef4444")}>
+                    <td style={styles.annualGainCell(row.annualGainPct == null ? "var(--text-secondary)" : row.annualGainPct >= 0 ? gainColor : "var(--primary-blue)")}>
                       {row.annualGainPct == null ? "—" : `${row.annualGainPct >= 0 ? "+" : ""}${row.annualGainPct.toFixed(1)}%`}
                     </td>
                     <td style={styles.secondaryValueCell}>
@@ -159,8 +159,8 @@ const PortfolioTable = ({
                     <td style={styles.absoluteRatingCell(
                       row.absoluteRating === null ? "var(--text-secondary)"
                         : row.absoluteRating >= 7 ? "var(--success-green)"
-                        : row.absoluteRating >= 4 ? "#f59e0b"
-                        : "#ef4444"
+                        : row.absoluteRating >= 4 ? "var(--warning-orange)"
+                        : "var(--primary-blue)"
                     )}>
                       {row.absoluteRating !== null
                         ? <>{row.absoluteRating}{row.stockType ? <span style={styles.stockTypeChip}>-{row.stockType.charAt(0).toUpperCase()}</span> : null}</>
@@ -186,7 +186,7 @@ const PortfolioTable = ({
                 const totalYtdGainPct  = totalInvested > 0
                   ? tableRows.reduce((sum, r) => sum + (r.ytdGainPct / 100) * r.totalInvested, 0) / totalInvested * 100
                   : 0;
-                const glColor          = totalGain >= 0 ? "var(--success-green)" : "#ef4444";
+                const glColor          = totalGain >= 0 ? "var(--success-green)" : "var(--primary-blue)";
                 const rowsWithAnnual   = tableRows.filter(r => r.annualGainPct != null && r.yearsHeld != null);
                 const wNum = rowsWithAnnual.reduce((sum, r) => sum + r.annualGainPct! * r.totalInvested * r.yearsHeld!, 0);
                 const wDen = rowsWithAnnual.reduce((sum, r) => sum + r.totalInvested * r.yearsHeld!, 0);
@@ -214,15 +214,15 @@ const PortfolioTable = ({
                     <td style={styles.totalGainLossCell(glColor)}>
                       {totalGainPct >= 0 ? "+" : ""}{totalGainPct.toFixed(1)}%
                     </td>
-                    <td style={styles.totalGainLossCell(totalYtdGainPct >= 0 ? "var(--success-green)" : "#ef4444")}>
+                    <td style={styles.totalGainLossCell(totalYtdGainPct >= 0 ? "var(--success-green)" : "var(--primary-blue)")}>
                       {totalYtdGainPct >= 0 ? "+" : ""}{totalYtdGainPct.toFixed(1)}%
                     </td>
                     <td style={styles.totalInnerCell}>
-                      <div style={styles.totalAnnualGainCell(weightedAnnualGainPct == null ? "var(--text-secondary)" : weightedAnnualGainPct >= 0 ? glColor : "#ef4444")}>
+                      <div style={styles.totalAnnualGainCell(weightedAnnualGainPct == null ? "var(--text-secondary)" : weightedAnnualGainPct >= 0 ? glColor : "var(--primary-blue)")}>
                         {weightedAnnualGainPct == null ? "—" : `${weightedAnnualGainPct >= 0 ? "+" : ""}${weightedAnnualGainPct.toFixed(1)}%`}
                         <span style={styles.tableSubLabelWtd}>wtd</span>
                       </div>
-                      <div style={styles.totalSimpleAnnualGainRow(simpleAnnualGainPct == null ? "var(--text-secondary)" : simpleAnnualGainPct >= 0 ? glColor : "#ef4444")}>
+                      <div style={styles.totalSimpleAnnualGainRow(simpleAnnualGainPct == null ? "var(--text-secondary)" : simpleAnnualGainPct >= 0 ? glColor : "var(--primary-blue)")}>
                         {simpleAnnualGainPct == null ? "—" : `${simpleAnnualGainPct >= 0 ? "+" : ""}${simpleAnnualGainPct.toFixed(1)}%`}
                         <span style={styles.tableSubLabel}>avg</span>
                       </div>

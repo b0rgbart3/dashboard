@@ -85,7 +85,7 @@ const FilterBar = ({
                     ? "var(--primary-purple)"
                     : "var(--card-border)",
                 background:
-                  filterStatus === s ? "rgba(123,63,228,0.2)" : "transparent",
+                  filterStatus === s ? "rgba(69,10,189,0.18)" : "transparent",
                 color:
                   filterStatus === s
                     ? "var(--text-primary)"
@@ -164,7 +164,7 @@ const FilterBar = ({
                     : "var(--card-border)",
                 background:
                   filterDividends === d
-                    ? "rgba(0,123,255,0.15)"
+                    ? "rgba(4,114,231,0.15)"
                     : "transparent",
                 color:
                   filterDividends === d

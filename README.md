@@ -1,4 +1,4 @@
-# Moon-Math Dashboard
+# Portfolio Dashboard
 
 A stock tracking dashboard for monitoring purchases, dividends, and projecting future portfolio value.
 

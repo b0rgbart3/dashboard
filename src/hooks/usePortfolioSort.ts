@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { matchesValueFilter, type Stock, type StockSummary, type FilterValue } from "../types";
 import { formatHeldDuration, type SortKey, type TableRow } from "../utils/portfolioUtils";
 
@@ -13,8 +13,18 @@ export function usePortfolioSort(
   sortKey: SortKey;
   handleSort: (key: SortKey, defaultDir: "asc" | "desc") => void;
 } {
-  const [sortKey, setSortKey] = useState<SortKey>("rating");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const VALID_SORT_KEYS: SortKey[] = ["ticker","name","totalInvested","totalValue","totalGain","gainPct","ytdGainPct","annualGainPct","totalShares","dividends","ytdDividends","slipIncome","realizedPnL","ytdRealizedPnL","held","rating","absoluteRating"];
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const saved = localStorage.getItem("tableSortKey") as SortKey;
+    return saved && VALID_SORT_KEYS.includes(saved) ? saved : "rating";
+  });
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => {
+    const saved = localStorage.getItem("tableSortDir");
+    return saved === "asc" || saved === "desc" ? saved : "desc";
+  });
+
+  useEffect(() => { localStorage.setItem("tableSortKey", sortKey) }, [sortKey]);
+  useEffect(() => { localStorage.setItem("tableSortDir", sortDir) }, [sortDir]);
 
   const handleSort = (key: SortKey, defaultDir: "asc" | "desc") => {
     if (key === sortKey) {

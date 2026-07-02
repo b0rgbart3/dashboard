@@ -5,16 +5,118 @@ import type { CSSProperties } from "react";
 // ---------------------------------------------------------------------------
 
 export const pageContainer: CSSProperties = {
-  display: "flex", flexDirection: "column", alignItems: "center",
-  gap: "2rem", padding: "2rem", minHeight: "100vh",
+  display: "flex", flexDirection: "column",
+  minHeight: "100vh",
 };
 
-export const heroSection: CSSProperties = { textAlign: "center" };
+export const navbar: CSSProperties = {
+  width: "100%",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "1rem 2rem",
+  borderBottom: "1px solid rgba(4, 114, 231, 0.14)",
+  position: "sticky",
+  top: 0,
+  zIndex: 100,
+  background: "rgba(2, 8, 16, 0.92)",
+  backdropFilter: "blur(12px)",
+};
 
-export const pageTitle: CSSProperties = { fontSize: "3rem", marginBottom: "0.5rem" };
+export const logo: CSSProperties = {
+  fontSize: "1.4rem",
+  fontWeight: 700,
+  color: "var(--text-primary)",
+  margin: 0,
+  letterSpacing: "-0.02em",
+};
 
-export const pageSubtitle: CSSProperties = {
-  color: "var(--text-secondary)", fontSize: "1.1rem",
+export const hamburgerBtn: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "8px 10px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  lineHeight: 0,
+};
+
+export const dropdownMenu: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 8px)",
+  right: 0,
+  minWidth: "210px",
+  background: "var(--card-bg)",
+  border: "1px solid rgba(4, 114, 231, 0.2)",
+  borderRadius: "12px",
+  padding: "6px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "2px",
+  boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+  zIndex: 200,
+};
+
+export const dropdownItem: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "10px 14px",
+  borderRadius: "8px",
+  fontSize: "0.95rem",
+  cursor: "pointer",
+  background: "transparent",
+  border: "none",
+  color: "var(--text-primary)",
+  width: "100%",
+  textAlign: "left",
+};
+
+export const dropdownItemDanger: CSSProperties = {
+  color: "#9b7fd4",
+};
+
+export const modalOverlay: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0, 0, 0, 0.65)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 500,
+};
+
+export const modalBox: CSSProperties = {
+  background: "var(--card-bg)",
+  border: "1px solid rgba(4, 114, 231, 0.2)",
+  borderRadius: "16px",
+  padding: "2rem",
+  maxWidth: "420px",
+  width: "90%",
+  display: "flex",
+  flexDirection: "column",
+  gap: "1.5rem",
+  alignItems: "center",
+  boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+};
+
+export const modalText: CSSProperties = {
+  fontSize: "1rem",
+  color: "var(--text-primary)",
+  textAlign: "center",
+  margin: 0,
+};
+
+export const modalButtons: CSSProperties = {
+  display: "flex",
+  gap: "0.75rem",
+  flexWrap: "wrap",
+  justifyContent: "center",
+};
+
+export const contentArea: CSSProperties = {
+  display: "flex", flexDirection: "column", alignItems: "center",
+  gap: "2rem", padding: "2rem", flex: 1,
 };
 
 export const warningBanner: CSSProperties = {
@@ -24,31 +126,10 @@ export const warningBanner: CSSProperties = {
   color: "var(--text-primary)", fontSize: "0.95rem", textAlign: "center",
 };
 
-export const actionButtonGroup: CSSProperties = {
-  display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center",
-};
-
-// Shared by Open Dashboard, Refresh Prices, Import CSV buttons
-export const primaryActionButton: CSSProperties = {
-  display: "flex", alignItems: "center", gap: "10px",
-  padding: "14px 32px", fontSize: "1rem", borderRadius: "12px",
-};
-
-// Shared by import options row and delete confirm row
-export const confirmationPromptRow: CSSProperties = {
-  display: "flex", alignItems: "center", gap: "0.5rem",
-  flexWrap: "wrap", justifyContent: "center",
-};
-
-// Shared by both confirmation dialogs' label text
-export const confirmationPromptText: CSSProperties = {
-  fontSize: "0.95rem", color: "var(--text-secondary)",
-};
-
 // Shared by "Yes, clear first" and "Yes, delete everything"
 export const destructiveConfirmButton: CSSProperties = {
   padding: "10px 20px", fontSize: "0.95rem", borderRadius: "10px",
-  background: "#e53e3e", borderColor: "#e53e3e",
+  background: "#6f46d4", borderColor: "#3008a0",
 };
 
 // Shared by Cancel and "No, keep existing" buttons
@@ -57,12 +138,6 @@ export const cancelButton: CSSProperties = {
 };
 
 export const hiddenFileInput: CSSProperties = { display: "none" };
-
-export const dangerActionButton: CSSProperties = {
-  display: "flex", alignItems: "center", gap: "10px",
-  padding: "14px 32px", fontSize: "1rem", borderRadius: "12px",
-  color: "var(--color-error, #e53e3e)", borderColor: "var(--color-error, #e53e3e)",
-};
 
 export const loadingContainer: CSSProperties = {
   display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem",
@@ -197,11 +272,11 @@ export function incomeCell(isPositive: boolean): CSSProperties {
   };
 }
 
-// Realized P&L body cells: 0=muted, pos=green, neg=red
+// Realized P&L body cells: 0=muted, pos=teal, neg=blue
 export function realizedPnLCell(value: number): CSSProperties {
   return {
     padding: "4px 4px", textAlign: "right", fontWeight: 600,
-    color: value === 0 ? "var(--text-secondary)" : value > 0 ? "var(--success-green)" : "#ef4444",
+    color: value === 0 ? "var(--text-secondary)" : value > 0 ? "var(--success-green)" : "var(--primary-blue)",
   };
 }
 
@@ -230,7 +305,7 @@ export function totalIncomeDiv(isPositive: boolean): CSSProperties {
 export function totalRealizedCell(value: number): CSSProperties {
   return {
     padding: "4px 4px", textAlign: "right", fontWeight: 700,
-    color: value === 0 ? "var(--text-secondary)" : value > 0 ? "var(--success-green)" : "#ef4444",
+    color: value === 0 ? "var(--text-secondary)" : value > 0 ? "var(--success-green)" : "var(--primary-blue)",
   };
 }
 

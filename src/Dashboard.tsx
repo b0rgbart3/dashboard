@@ -32,7 +32,14 @@ import {
   Legend,
 } from "recharts";
 import { format, parse, startOfMonth } from "date-fns";
-import { matchesValueFilter, type Transaction, type Stock, type StockSummary, type FilterValue, type ProjectionSettings } from "./types";
+import {
+  matchesValueFilter,
+  type Transaction,
+  type Stock,
+  type StockSummary,
+  type FilterValue,
+  type ProjectionSettings,
+} from "./types";
 
 interface HistoricalDataPoint {
   timestamp: number; // Unix ms — numeric XAxis dataKey
@@ -59,14 +66,40 @@ interface DashboardProps {
   portfolioLoaded: boolean;
   lookedUpTickers: React.RefObject<Set<string>>;
   transactionCache: Record<string, Transaction[]>;
-  onTransactionCacheChange: React.Dispatch<React.SetStateAction<Record<string, Transaction[]>>>;
+  onTransactionCacheChange: React.Dispatch<
+    React.SetStateAction<Record<string, Transaction[]>>
+  >;
   priceCache: Record<string, { price: number; fetchedAt: number }>;
-  onPriceCacheChange: React.Dispatch<React.SetStateAction<Record<string, { price: number; fetchedAt: number }>>>;
+  onPriceCacheChange: React.Dispatch<
+    React.SetStateAction<Record<string, { price: number; fetchedAt: number }>>
+  >;
   projectionSettingsCache: Record<string, ProjectionSettings>;
-  onProjectionSettingsCacheChange: React.Dispatch<React.SetStateAction<Record<string, ProjectionSettings>>>;
+  onProjectionSettingsCacheChange: React.Dispatch<
+    React.SetStateAction<Record<string, ProjectionSettings>>
+  >;
 }
 
-const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, filterValue, onFilterValueChange, filterDividends, onFilterDividendsChange, stocks, onStocksChange, summaries, portfolioLoaded, lookedUpTickers, transactionCache, onTransactionCacheChange, priceCache, onPriceCacheChange, projectionSettingsCache, onProjectionSettingsCacheChange }: DashboardProps) => {
+const Dashboard = ({
+  onBack,
+  initialTicker,
+  filterStatus,
+  onFilterStatusChange,
+  filterValue,
+  onFilterValueChange,
+  filterDividends,
+  onFilterDividendsChange,
+  stocks,
+  onStocksChange,
+  summaries,
+  portfolioLoaded,
+  lookedUpTickers,
+  transactionCache,
+  onTransactionCacheChange,
+  priceCache,
+  onPriceCacheChange,
+  projectionSettingsCache,
+  onProjectionSettingsCacheChange,
+}: DashboardProps) => {
   const [currentStockIndex, setCurrentStockIndex] = useState<number>(0);
   const navigatedViaHash = useRef(false);
   const [showAddStockModal, setShowAddStockModal] = useState<boolean>(false);
@@ -93,13 +126,20 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
     );
     let qty = 0;
     for (const t of sorted) {
-      if (t.type === "BUY" || t.type === "purchase" || t.type === "REC"
-          || t.type === "SHARE_EXCHANGE" || t.type === "MRGS_MERGER" || t.type === "SPINOFF")
+      if (
+        t.type === "BUY" ||
+        t.type === "purchase" ||
+        t.type === "REC" ||
+        t.type === "SHARE_EXCHANGE" ||
+        t.type === "MRGS_MERGER" ||
+        t.type === "SPINOFF"
+      )
         qty += t.quantity;
-      else if (t.type === "SELL" || t.type === "SHARE_EXCHANGE_OUT") qty -= t.quantity;
+      else if (t.type === "SELL" || t.type === "SHARE_EXCHANGE_OUT")
+        qty -= t.quantity;
       else if (t.type === "SPLIT") qty *= t.quantity;
     }
-    return qty;
+    return qty < 0.0001 ? 0 : qty;
   }, [transactions]);
   const lastPurchasePrice =
     purchases.length > 0 ? purchases[purchases.length - 1].price : 0;
@@ -126,9 +166,13 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
       return;
     }
     // Handle navigation from homepage — prefer explicit prop, fall back to hash
-    const target = (initialTicker ?? window.location.hash.slice(1)).toUpperCase();
+    const target = (
+      initialTicker ?? window.location.hash.slice(1)
+    ).toUpperCase();
     if (target) {
-      const idx = stocks.findIndex((s: Stock) => s.ticker.toUpperCase() === target);
+      const idx = stocks.findIndex(
+        (s: Stock) => s.ticker.toUpperCase() === target,
+      );
       if (idx !== -1) {
         setCurrentStockIndex(idx);
         navigatedViaHash.current = true;
@@ -138,24 +182,41 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
     // Guard with lookedUpTickers so this fires at most once per ticker per session,
     // regardless of how many times the Dashboard mounts.
     stocks
-      .filter(s => (s.name === s.ticker || !s.description) && !lookedUpTickers.current?.has(s.ticker))
+      .filter(
+        (s) =>
+          (s.name === s.ticker || !s.description) &&
+          !lookedUpTickers.current?.has(s.ticker),
+      )
       .forEach(async (stock) => {
         lookedUpTickers.current?.add(stock.ticker);
         try {
-          const res = await fetch(`http://localhost:5001/api/lookup/${stock.ticker}`);
+          const res = await fetch(
+            `http://localhost:5001/api/lookup/${stock.ticker}`,
+          );
           if (!res.ok) return;
-          const { name, description } = await res.json() as { name: string; description?: string };
+          const { name, description } = (await res.json()) as {
+            name: string;
+            description?: string;
+          };
           const updates: { name?: string; description?: string } = {};
-          if (name && name !== stock.ticker && stock.name === stock.ticker) updates.name = name;
-          if (description && !stock.description) updates.description = description;
+          if (name && name !== stock.ticker && stock.name === stock.ticker)
+            updates.name = name;
+          if (description && !stock.description)
+            updates.description = description;
           if (Object.keys(updates).length === 0) return;
-          onStocksChange((prev: Stock[]) => prev.map(s => s.ticker === stock.ticker ? { ...s, ...updates } : s));
+          onStocksChange((prev: Stock[]) =>
+            prev.map((s) =>
+              s.ticker === stock.ticker ? { ...s, ...updates } : s,
+            ),
+          );
           fetch(`http://localhost:5001/api/stocks/${stock.ticker}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(updates),
           }).catch(() => {});
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       });
   }, [portfolioLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -168,7 +229,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
   useEffect(() => {
     if (!currentTicker) return;
     const cached = transactionCache[currentTicker];
-    if (cached) { setTransactions(cached); return; }
+    if (cached) {
+      setTransactions(cached);
+      return;
+    }
     setTransactions([]);
     let cancelled = false;
     fetch(`http://localhost:5001/api/transactions?ticker=${currentTicker}`)
@@ -176,10 +240,17 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
       .then((data: Transaction[]) => {
         if (cancelled) return;
         setTransactions(data);
-        onTransactionCacheChange(prev => ({ ...prev, [currentTicker]: data }));
+        onTransactionCacheChange((prev) => ({
+          ...prev,
+          [currentTicker]: data,
+        }));
       })
-      .catch((err) => { if (!cancelled) console.error("Error fetching transactions:", err); });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        if (!cancelled) console.error("Error fetching transactions:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [currentTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -196,10 +267,18 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
       .then((data: { price: number }) => {
         if (cancelled) return;
         setLivePrice(data.price);
-        onPriceCacheChange(prev => ({ ...prev, [currentTicker]: { price: data.price, fetchedAt: Date.now() } }));
+        onPriceCacheChange((prev) => ({
+          ...prev,
+          [currentTicker]: { price: data.price, fetchedAt: Date.now() },
+        }));
       })
-      .catch((err) => { if (!cancelled) console.warn(`Live price unavailable for ${currentTicker}:`, err); });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        if (!cancelled)
+          console.warn(`Live price unavailable for ${currentTicker}:`, err);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [currentTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTransaction = async (t: Omit<Transaction, "id">): Promise<void> => {
@@ -215,7 +294,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
           const updated = [...prev, saved].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
           );
-          onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: updated }));
+          onTransactionCacheChange((cache) => ({
+            ...cache,
+            [currentTicker]: updated,
+          }));
           return updated;
         });
       }
@@ -239,16 +321,24 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
         body: JSON.stringify(tagged),
       });
       if (res.ok) {
-        const { inserted: saved, skipped }: { inserted: Transaction[]; skipped: number } = await res.json();
+        const {
+          inserted: saved,
+          skipped,
+        }: { inserted: Transaction[]; skipped: number } = await res.json();
         setTransactions((prev) => {
           const updated = [...prev, ...saved].sort(
             (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
           );
-          onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: updated }));
+          onTransactionCacheChange((cache) => ({
+            ...cache,
+            [currentTicker]: updated,
+          }));
           return updated;
         });
         if (skipped > 0) {
-          alert(`${skipped} duplicate transaction${skipped !== 1 ? "s were" : " was"} skipped (already exist in the database).`);
+          alert(
+            `${skipped} duplicate transaction${skipped !== 1 ? "s were" : " was"} skipped (already exist in the database).`,
+          );
         }
       }
     } catch (err) {
@@ -270,7 +360,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
       );
       if (res.ok) {
         setTransactions([]);
-        onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: [] }));
+        onTransactionCacheChange((cache) => ({
+          ...cache,
+          [currentTicker]: [],
+        }));
       }
     } catch (err) {
       console.error("Error deleting all transactions:", err);
@@ -285,7 +378,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
       if (res.ok) {
         setTransactions((prev) => {
           const updated = prev.filter((t) => t.id !== id);
-          onTransactionCacheChange(cache => ({ ...cache, [currentTicker]: updated }));
+          onTransactionCacheChange((cache) => ({
+            ...cache,
+            [currentTicker]: updated,
+          }));
           return updated;
         });
       }
@@ -348,9 +444,21 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
           return updated;
         });
         setTransactions([]);
-        onTransactionCacheChange(cache => { const next = { ...cache }; delete next[currentTicker]; return next; });
-        onPriceCacheChange(cache => { const next = { ...cache }; delete next[currentTicker]; return next; });
-        onProjectionSettingsCacheChange(cache => { const next = { ...cache }; delete next[currentTicker]; return next; });
+        onTransactionCacheChange((cache) => {
+          const next = { ...cache };
+          delete next[currentTicker];
+          return next;
+        });
+        onPriceCacheChange((cache) => {
+          const next = { ...cache };
+          delete next[currentTicker];
+          return next;
+        });
+        onProjectionSettingsCacheChange((cache) => {
+          const next = { ...cache };
+          delete next[currentTicker];
+          return next;
+        });
       }
     } catch (err) {
       console.error("Error removing stock:", err);
@@ -365,7 +473,8 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
         const isActive = summary && summary.totalShares > 0;
         if (filterStatus === "active" && !isActive) return false;
         if (filterStatus === "inactive" && isActive) return false;
-        if (!matchesValueFilter(summary?.marketValue ?? 0, filterValue)) return false;
+        if (!matchesValueFilter(summary?.marketValue ?? 0, filterValue))
+          return false;
         if (filterDividends === "yes" && !summary?.hasDividends) return false;
         if (filterDividends === "no" && summary?.hasDividends) return false;
         return true;
@@ -423,8 +532,16 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
     // Completely separate from all other calculations.
     const dividendByDay = new Map<string, number>();
     for (const t of transactions) {
-      if (t.type === "dividend" || t.type === "MDIV" || t.type === "CDIV" || t.type === "RETURN_OF_CAPITAL") {
-        dividendByDay.set(t.date, (dividendByDay.get(t.date) ?? 0) + t.price * t.quantity);
+      if (
+        t.type === "dividend" ||
+        t.type === "MDIV" ||
+        t.type === "CDIV" ||
+        t.type === "RETURN_OF_CAPITAL"
+      ) {
+        dividendByDay.set(
+          t.date,
+          (dividendByDay.get(t.date) ?? 0) + t.price * t.quantity,
+        );
       }
     }
 
@@ -446,7 +563,8 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
     for (const t of sorted) {
       const dayKey = t.date;
       const existing = dayMap.get(dayKey);
-      const isBuy = t.type === "BUY" || t.type === "purchase" || t.type === "REC";
+      const isBuy =
+        t.type === "BUY" || t.type === "purchase" || t.type === "REC";
       const isSell = t.type === "SELL";
       const isCashIncome =
         t.type === "dividend" ||
@@ -562,9 +680,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
   });
 
   const historicalData = getHistoricalData();
-  const lastDividendPayment = historicalData.length > 0
-    ? historicalData[historicalData.length - 1].lastDividendAmount
-    : null;
+  const lastDividendPayment =
+    historicalData.length > 0
+      ? historicalData[historicalData.length - 1].lastDividendAmount
+      : null;
   const { data: annualGrowthData, useMonths: growthUseMonths } =
     getAnnualGrowthData();
 
@@ -681,10 +800,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
           isLive={livePrice !== null}
           totalShares={totalShares}
           marketValue={totalShares * currentPrice}
-          totalInvested={summaries[currentTicker]?.totalInvested ?? purchases.reduce(
-            (sum, p) => sum + p.quantity * p.price,
-            0,
-          )}
+          totalInvested={
+            summaries[currentTicker]?.totalInvested ??
+            purchases.reduce((sum, p) => sum + p.quantity * p.price, 0)
+          }
           sellProceeds={sells.reduce((sum, s) => sum + s.quantity * s.price, 0)}
           realizedPnL={summaries[currentTicker]?.realizedPnL}
           cashIncome={slipTransactions.reduce(
@@ -825,7 +944,14 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
               )}
             </div>
             {accumulationOpen && (
-              <div style={{ position: "relative", height: "300px", width: "100%", minWidth: 0 }}>
+              <div
+                style={{
+                  position: "relative",
+                  height: "300px",
+                  width: "100%",
+                  minWidth: 0,
+                }}
+              >
                 <div
                   className="flex items-center gap-4"
                   style={{
@@ -845,7 +971,12 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         borderTop: "2px dashed var(--primary-blue)",
                       }}
                     />
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
                       Current Value
                     </span>
                   </div>
@@ -858,7 +989,12 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         borderRadius: "2px",
                       }}
                     />
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
                       Total Spent
                     </span>
                   </div>
@@ -873,7 +1009,12 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                             borderRadius: "2px",
                           }}
                         />
-                        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
                           Dividends Received
                         </span>
                       </div>
@@ -882,10 +1023,15 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                           style={{
                             width: "24px",
                             height: "0",
-                            borderTop: "2px dashed #f59e0b",
+                            borderTop: "2px dashed var(--warning-orange)",
                           }}
                         />
-                        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
                           Last Dividend
                         </span>
                       </div>
@@ -948,7 +1094,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         <YAxis
                           yAxisId="right"
                           orientation="right"
-                          stroke="#f59e0b"
+                          stroke="var(--warning-orange)"
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
@@ -974,7 +1120,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                             "Total Spent": "var(--primary-purple)",
                             "Current Value": "var(--primary-blue)",
                             "Dividends Received": "var(--success-green)",
-                            "Last Dividend": "#f59e0b",
+                            "Last Dividend": "var(--warning-orange)",
                           };
                           const order = hasDividendData
                             ? [
@@ -1102,7 +1248,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                             yAxisId="right"
                             type="stepAfter"
                             dataKey="lastDividendAmount"
-                            stroke="#f59e0b"
+                            stroke="var(--warning-orange)"
                             fill="transparent"
                             strokeWidth={2}
                             strokeDasharray="5 5"
@@ -1116,13 +1262,13 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                           key={marker.timestamp}
                           yAxisId="left"
                           x={marker.timestamp}
-                          stroke="#a78bfa"
+                          stroke="#6f46d4"
                           strokeDasharray="4 4"
                           label={{
                             value: marker.label,
                             position: "insideTopRight",
                             fontSize: 10,
-                            fill: "#a78bfa",
+                            fill: "#6f46d4",
                           }}
                         />
                       ))}
@@ -1164,7 +1310,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed #f59e0b",
+                      borderTop: "2px dashed var(--warning-orange)",
                     }}
                   />
                   <span
@@ -1223,7 +1369,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke="#60a5fa"
+                        stroke="#0472e7"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -1244,7 +1390,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         <ReferenceLine
                           yAxisId="left"
                           y={avgGrowthPct}
-                          stroke="#f59e0b"
+                          stroke="var(--warning-orange)"
                           strokeDasharray="5 5"
                           strokeWidth={2}
                         />
@@ -1280,7 +1426,9 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                               label: "Gain / Loss",
                               value: `${gain >= 0 ? "+" : ""}$${gain.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                               color:
-                                gain >= 0 ? "var(--success-green)" : "#ef4444",
+                                gain >= 0
+                                  ? "var(--success-green)"
+                                  : "var(--primary-blue)",
                             },
                             {
                               label: "Gain %",
@@ -1288,14 +1436,14 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                               color:
                                 d.gainPct >= 0
                                   ? "var(--success-green)"
-                                  : "#ef4444",
+                                  : "var(--primary-blue)",
                             },
                           ];
                           if (d.deltaValue !== null) {
                             rows.push({
                               label: `${growthUseMonths ? "MoM" : "YoY"} Change`,
                               value: `${d.deltaValue >= 0 ? "+" : ""}$${d.deltaValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                              color: d.deltaValue >= 0 ? "#60a5fa" : "#f87171",
+                              color: d.deltaValue >= 0 ? "#0472e7" : "#004f89",
                             });
                           }
                           return (
@@ -1389,7 +1537,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                             fill={
                               entry.gainPct >= 0
                                 ? "var(--success-green)"
-                                : "var(--error-red, #ef4444)"
+                                : "#6f46d4"
                             }
                             fillOpacity={0.85}
                           />
@@ -1400,9 +1548,9 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         dataKey="deltaValue"
                         name={`${growthUseMonths ? "MoM" : "YoY"} $ Change`}
                         type="monotone"
-                        stroke="#60a5fa"
+                        stroke="#0472e7"
                         strokeWidth={2}
-                        dot={{ fill: "#60a5fa", r: 4, strokeWidth: 0 }}
+                        dot={{ fill: "#0472e7", r: 4, strokeWidth: 0 }}
                         activeDot={{ r: 6 }}
                         connectNulls={false}
                       />
@@ -1428,7 +1576,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
               <div
                 style={{ display: "flex", alignItems: "center", gap: "8px" }}
               >
-                <TrendingDown size={24} style={{ color: "#f59e0b" }} />
+                <TrendingDown
+                  size={24}
+                  style={{ color: "var(--warning-orange)" }}
+                />
                 <h2>Cost Basis</h2>
               </div>
               {costBasisOpen && costBasisChartData.total > 0 && (
@@ -1444,7 +1595,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                     style={{
                       width: "24px",
                       height: "0",
-                      borderTop: "2px dashed #f59e0b",
+                      borderTop: "2px dashed var(--warning-orange)",
                     }}
                   />
                   <span
@@ -1486,12 +1637,12 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         >
                           <stop
                             offset="5%"
-                            stopColor="#f59e0b"
+                            stopColor="#006b98"
                             stopOpacity={0.25}
                           />
                           <stop
                             offset="95%"
-                            stopColor="#f59e0b"
+                            stopColor="#006b98"
                             stopOpacity={0}
                           />
                         </linearGradient>
@@ -1519,7 +1670,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                       {costBasisChartData.total > 0 && (
                         <ReferenceLine
                           y={costBasisChartData.total}
-                          stroke="#f59e0b"
+                          stroke="var(--warning-orange)"
                           strokeDasharray="5 5"
                           strokeWidth={2}
                         />
@@ -1562,7 +1713,7 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                                     width: "10px",
                                     height: "10px",
                                     borderRadius: "2px",
-                                    background: "#f59e0b",
+                                    background: "var(--warning-orange)",
                                     flexShrink: 0,
                                   }}
                                 />
@@ -1596,10 +1747,10 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
                         type="monotone"
                         dataKey="avgCost"
                         name="Avg Cost / Share"
-                        stroke="#f59e0b"
+                        stroke="#006b98"
                         strokeWidth={2}
                         fill="url(#colorCostBasis)"
-                        dot={{ fill: "#f59e0b", r: 3, strokeWidth: 0 }}
+                        dot={{ fill: "#006b98", r: 3, strokeWidth: 0 }}
                         activeDot={{ r: 5 }}
                       />
                     </AreaChart>
@@ -1613,7 +1764,9 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
             purchases={purchases}
             currentPrice={currentPrice}
             ticker={currentTicker}
-            hasDividends={dividendTransactions.length > 0 || slipTransactions.length > 0}
+            hasDividends={
+              dividendTransactions.length > 0 || slipTransactions.length > 0
+            }
             projectionSettingsCache={projectionSettingsCache}
             onProjectionSettingsCacheChange={onProjectionSettingsCacheChange}
           />

@@ -71,7 +71,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
         grandTotalValue = adjSharesLast * lastPrice;
         grandTotalGainLoss = grandTotalValue - totalSpentMap[lastChronEntry.id];
     }
-    const grandGlColor = grandTotalGainLoss >= 0 ? 'var(--success-green)' : '#ef4444';
+    const grandGlColor = grandTotalGainLoss >= 0 ? 'var(--success-green)' : 'var(--primary-blue)';
 
     if (purchases.length === 0) {
         return (
@@ -145,7 +145,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                         <td>
                                             <span
                                                 className="badge"
-                                                style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.4)', fontSize: '0.7rem', padding: '2px 8px' }}
+                                                style={{ background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)', fontSize: '0.7rem', padding: '2px 8px' }}
                                             >
                                                 {ratioLabel}
                                             </span>
@@ -184,7 +184,7 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                         const currentValue = adjShares * lastPrice;
                         const gainLoss     = currentValue - totalSpentMap[p.id];
                         const gainLossPct  = totalSpentMap[p.id] > 0 ? (gainLoss / totalSpentMap[p.id]) * 100 : 0;
-                        const glColor      = gainLoss >= 0 ? 'var(--success-green)' : '#ef4444';
+                        const glColor      = gainLoss >= 0 ? 'var(--success-green)' : 'var(--primary-blue)';
 
                         return (
                             <Fragment key={p.id}>
@@ -203,19 +203,19 @@ const HistoryTable = ({ purchases, onSortToggle, onDelete, onDeleteAll }: Histor
                                             }
                                             style={
                                                 isReceiveType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(20,184,166,0.15)', color: '#2dd4bf', border: '1px solid rgba(20,184,166,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,119,149,0.15)', color: '#007795', border: '1px solid rgba(0,119,149,0.4)' }
                                                     : isExchangeOutType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)' }
                                                     : isRocType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.4)', whiteSpace: 'nowrap' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,119,149,0.12)', color: '#007795', border: '1px solid rgba(0,119,149,0.35)', whiteSpace: 'nowrap' }
                                                     : isFeeType(p.type)
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,107,152,0.15)', color: '#006b98', border: '1px solid rgba(0,107,152,0.4)' }
                                                     : p.type === 'MRGS'
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)' }
                                                     : p.type === 'MRGC'
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(0,119,149,0.12)', color: '#007795', border: '1px solid rgba(0,119,149,0.35)' }
                                                     : p.type === 'MRGC_MERGER'
-                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.4)' }
+                                                    ? { fontSize: '0.7rem', padding: '2px 8px', background: 'rgba(69,10,189,0.15)', color: '#c8aaff', border: '1px solid rgba(69,10,189,0.4)' }
                                                     : { fontSize: '0.7rem', padding: '2px 8px' }
                                             }
                                         >

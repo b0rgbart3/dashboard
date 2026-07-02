@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap');
 
 :root {
-  --bg-color: #050609;
-  --card-bg: rgba(17, 19, 31, 0.8);
-  --card-border: rgba(255, 255, 255, 0.08);
-  --primary-purple: #7b3fe4;
-  --primary-blue: #007bff;
-  --success-green: #24ad64;
-  --warning-orange: #f2a900;
-  --danger-red: #eb4d4b;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --glass-bg: rgba(255, 255, 255, 0.03);
+  --bg-color: #020810;
+  --card-bg: rgba(4, 8, 28, 0.88);
+  --card-border: rgba(4, 114, 231, 0.14);
+  --primary-purple: #6f46d4;
+  --primary-blue: #0472e7;
+  --success-green: #007795;
+  --warning-orange: #006b98;
+  --danger-red: #6f46d4;
+  --text-primary: #d4e4f8;
+  --text-secondary: #5a7a9a;
+  --glass-bg: rgba(4, 114, 231, 0.02);
   --glass-blur: blur(12px);
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -29,8 +29,8 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(123, 63, 228, 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(0, 123, 255, 0.1) 0%, transparent 40%);
+    radial-gradient(circle at 20% 20%, rgba(4, 114, 231, 0.07) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(0, 119, 149, 0.05) 0%, transparent 40%);
 }
 
 h1,
@@ -43,7 +43,9 @@ h4 {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spinner {
@@ -76,16 +78,16 @@ h4 {
   backdrop-filter: var(--glass-blur);
   border: 1px solid var(--card-border);
   border-radius: 16px;
-  padding: 0.75rem 1.5rem 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: 10px 10px 10px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 18px rgba(4, 114, 231, 0.45);
   transition: var(--transition-smooth);
   margin-bottom: 10px;
   overflow: hidden;
 }
 
 .glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  border-color: rgba(4, 114, 231, 0.32);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 20px rgba(4, 114, 231, 0.46);
 }
 
 .glass-card:focus,
@@ -127,9 +129,19 @@ h4 {
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.15);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(123, 63, 228, 0.4);
+  box-shadow: 0 4px 20px rgba(4, 114, 231, 0.45);
+}
+
+.dropdown-item:hover {
+  background: rgba(4, 114, 231, 0.1) !important;
+  color: var(--text-primary) !important;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .input {
@@ -262,18 +274,18 @@ tr:hover td {
 }
 
 .badge-success {
-  background: rgba(36, 173, 100, 0.15);
+  background: rgba(0, 119, 149, 0.15);
   color: var(--success-green);
 }
 
 .badge-warning {
-  background: rgba(242, 169, 0, 0.15);
+  background: rgba(0, 107, 152, 0.15);
   color: var(--warning-orange);
 }
 
 .badge-danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: rgba(69, 10, 189, 0.18);
+  color: #c8aaff;
 }
 
 .badge-secondary {
@@ -373,6 +385,17 @@ tr:hover td {
 }
 
 .btn-delete:hover {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
+  color: #d4b8ff;
+  background: rgba(69, 10, 189, 0.18);
+  border: 1px solid rgba(69, 10, 189, 0.35);
+}
+
+@media (max-width: 767px) {
+  .charts-row {
+    flex-direction: column !important;
+  }
+  .charts-row > * {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
 }

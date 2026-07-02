@@ -35,7 +35,7 @@ const fmtGain$ = (val: number) =>
   `${val >= 0 ? "+" : "-"}$${fmt$(Math.abs(val))}`;
 
 const gainColor = (val: number) =>
-  val >= 0 ? "var(--success-green)" : "var(--danger-red, #f87171)";
+  val >= 0 ? "var(--success-green)" : "var(--primary-blue)";
 
 const COL_STYLE: React.CSSProperties = {
   width: "25%",
@@ -213,8 +213,8 @@ const Ticker = ({
                   fontSize: "0.6rem",
                   fontWeight: 700,
                   letterSpacing: "0.05em",
-                  color: "#22c55e",
-                  border: "1px solid #22c55e",
+                  color: "#007795",
+                  border: "1px solid #007795",
                   borderRadius: "4px",
                   padding: "0 4px",
                   lineHeight: "1.4",
@@ -241,7 +241,7 @@ const Ticker = ({
           <Row label="Rating">
             <span style={{
               ...VALUE_STYLE,
-              color: rating >= 7 ? "var(--success-green)" : rating >= 4 ? "#f59e0b" : "var(--danger-red, #f87171)",
+              color: rating >= 7 ? "var(--success-green)" : rating >= 4 ? "var(--warning-orange)" : "var(--primary-blue)",
             }}>
               {rating.toFixed(1)} / 10
             </span>
@@ -251,7 +251,7 @@ const Ticker = ({
           <Row label={`Abs. Score${stockType ? ` (${stockType})` : ""}`}>
             <span style={{
               ...VALUE_STYLE,
-              color: absoluteRating >= 7 ? "var(--success-green)" : absoluteRating >= 4 ? "#f59e0b" : "var(--danger-red, #f87171)",
+              color: absoluteRating >= 7 ? "var(--success-green)" : absoluteRating >= 4 ? "var(--warning-orange)" : "var(--primary-blue)",
             }}>
               {absoluteRating.toFixed(1)} / 10
             </span>
@@ -273,7 +273,7 @@ const Ticker = ({
           <span style={VALUE_STYLE}>{totalShares > 0 ? totalShares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}</span>
         </Row>
         <Row label="Market Value">
-          <span style={{ ...VALUE_STYLE, color: "var(--primary-purple)" }}>${fmt$(marketValue)}</span>
+          <span style={{ ...VALUE_STYLE, color: "var(--primary-blue)" }}>${fmt$(marketValue)}</span>
         </Row>
         {heldDuration !== null && (
           <Row label="Held">
@@ -373,7 +373,7 @@ const Ticker = ({
             )}
             {withheldTax > 0 && (
               <Row label="Tax Withheld (DTAX)">
-                <span style={{ ...VALUE_STYLE, color: "var(--danger-red, #f87171)" }}>-${fmt$(withheldTax)}</span>
+                <span style={{ ...VALUE_STYLE, color: "var(--primary-blue)" }}>-${fmt$(withheldTax)}</span>
               </Row>
             )}
             {withheldTax > 0 && dividendIncome > 0 && (

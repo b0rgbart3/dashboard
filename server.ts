@@ -1074,7 +1074,7 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
     res.json(result);
 });
 
-// GET monthly portfolio Ann% vs SPY Ann% for benchmark comparison chart
+// GET monthly portfolio Ann% vs SPY Ann% vs Nasdaq (QQQ) Ann% for benchmark comparison chart
 app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
     if (fs.existsSync(BENCHMARK_CACHE_FILE)) {
         try {
@@ -1096,24 +1096,37 @@ app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
     const [sy, sm] = startMonth.split('-').map(Number);
     const startMonthNum = sy * 12 + sm;
 
-    // Fetch SPY adjusted monthly closes from portfolio start to today
+    // Fetch SPY and QQQ adjusted monthly closes from portfolio start to today
     const spyPrices: Record<string, number> = {};
+    const nasdaqPrices: Record<string, number> = {};
     try {
-        const spyHist = await withTimeout(
-            yahooFinance.chart('SPY', { period1: new Date(`${startMonth}-01`), period2: new Date(), interval: '1mo' }),
-            12000
-        );
+        const [spyHist, nasdaqHist] = await Promise.all([
+            withTimeout(
+                yahooFinance.chart('SPY', { period1: new Date(`${startMonth}-01`), period2: new Date(), interval: '1mo' }),
+                12000
+            ),
+            withTimeout(
+                yahooFinance.chart('QQQ', { period1: new Date(`${startMonth}-01`), period2: new Date(), interval: '1mo' }),
+                12000
+            ),
+        ]);
         for (const row of spyHist.quotes) {
             const m = row.date.toISOString().substring(0, 7);
             const price = row.adjclose ?? row.close;
             if (typeof price === 'number' && price > 0) spyPrices[m] = price;
         }
+        for (const row of nasdaqHist.quotes) {
+            const m = row.date.toISOString().substring(0, 7);
+            const price = row.adjclose ?? row.close;
+            if (typeof price === 'number' && price > 0) nasdaqPrices[m] = price;
+        }
     } catch { return res.json([]); }
 
     const spyStart = spyPrices[startMonth];
     if (!spyStart) return res.json([]);
+    const nasdaqStart = nasdaqPrices[startMonth];
 
-    const result: Array<{ month: string; portfolioAnn: number; spyAnn: number }> = [];
+    const result: Array<{ month: string; portfolioAnn: number; spyAnn: number; nasdaqAnn: number }> = [];
     for (const row of history) {
         const [y, m] = row.month.split('-').map(Number);
         const monthsElapsed = y * 12 + m - startMonthNum;
@@ -1132,10 +1145,17 @@ app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
         if (!spyPrice) continue;
         const spyAnn = (Math.pow(spyPrice / spyStart, 1 / years) - 1) * 100;
 
+        // Nasdaq (QQQ) Ann%: lump-sum from portfolio start date to this month
+        const nasdaqPrice = nasdaqPrices[row.month];
+        const nasdaqAnn = nasdaqStart && nasdaqPrice
+            ? (Math.pow(nasdaqPrice / nasdaqStart, 1 / years) - 1) * 100
+            : spyAnn;
+
         result.push({
             month: row.month,
             portfolioAnn: +portfolioAnn.toFixed(1),
             spyAnn: +spyAnn.toFixed(1),
+            nasdaqAnn: +nasdaqAnn.toFixed(1),
         });
     }
 
