@@ -170,13 +170,16 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
     const cached = transactionCache[currentTicker];
     if (cached) { setTransactions(cached); return; }
     setTransactions([]);
+    let cancelled = false;
     fetch(`http://localhost:5001/api/transactions?ticker=${currentTicker}`)
       .then((res) => res.json())
       .then((data: Transaction[]) => {
+        if (cancelled) return;
         setTransactions(data);
         onTransactionCacheChange(prev => ({ ...prev, [currentTicker]: data }));
       })
-      .catch((err) => console.error("Error fetching transactions:", err));
+      .catch((err) => { if (!cancelled) console.error("Error fetching transactions:", err); });
+    return () => { cancelled = true; };
   }, [currentTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -187,15 +190,16 @@ const Dashboard = ({ onBack, initialTicker, filterStatus, onFilterStatusChange, 
       return;
     }
     setLivePrice(null);
+    let cancelled = false;
     fetch(`http://localhost:5001/api/price/${currentTicker}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: { price: number }) => {
+        if (cancelled) return;
         setLivePrice(data.price);
         onPriceCacheChange(prev => ({ ...prev, [currentTicker]: { price: data.price, fetchedAt: Date.now() } }));
       })
-      .catch((err) =>
-        console.warn(`Live price unavailable for ${currentTicker}:`, err),
-      );
+      .catch((err) => { if (!cancelled) console.warn(`Live price unavailable for ${currentTicker}:`, err); });
+    return () => { cancelled = true; };
   }, [currentTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTransaction = async (t: Omit<Transaction, "id">): Promise<void> => {

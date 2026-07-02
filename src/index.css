@@ -88,6 +88,15 @@ h4 {
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
 }
 
+.glass-card:focus,
+.glass-card:focus-visible,
+.glass-card *:focus,
+.glass-card *:focus-visible,
+.glass-card svg:focus,
+.glass-card svg *:focus {
+  outline: none;
+}
+
 .btn {
   padding: 0.75rem 1.5rem;
   border-radius: 8px;

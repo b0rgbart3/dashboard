@@ -49,9 +49,10 @@ Then, in two separate terminals:
 
 **Terminal 1 — Backend server:**
 
-```bash
 npm run server:dev
-```
+
+````bash
+
 
 **Terminal 2 — Frontend:**
 
@@ -70,3 +71,4 @@ Then open http://localhost:5173 in your browser.
 | `npm run build`      | Build the frontend for production         |
 | `npm run preview`    | Preview the production build              |
 | `npm run typecheck`  | Run TypeScript type checking              |
+````

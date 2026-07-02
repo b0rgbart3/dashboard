@@ -390,13 +390,31 @@ app.patch('/api/stocks/:ticker', (req: Request, res: Response) => {
 app.get('/api/price/:ticker', async (req: Request, res: Response) => {
     const { ticker } = req.params;
     const yfTicker = toYfTicker(ticker);
+
+    const dbFallbackPrice = (): number | null => {
+        try {
+            const txns: Array<{ ticker: string; type: string; price: number; date: string }> =
+                JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+            const recent = txns
+                .filter(t => t.ticker === ticker && (t.type === 'BUY' || t.type === 'SELL' || t.type === 'purchase'))
+                .sort((a, b) => b.date.localeCompare(a.date));
+            return recent[0]?.price ?? null;
+        } catch { return null; }
+    };
+
     try {
         const quote = await yahooFinance.quote(yfTicker);
         const price = quote?.regularMarketPrice;
-        if (price == null) return res.status(404).json({ error: `Price not found for ${yfTicker}` });
+        if (price == null) {
+            const fb = dbFallbackPrice();
+            if (fb != null) return res.json({ price: fb });
+            return res.status(404).json({ error: `Price not found for ${yfTicker}` });
+        }
         res.json({ price });
     } catch (err: unknown) {
         console.error('[price]', ticker, err);
+        const fb = dbFallbackPrice();
+        if (fb != null) return res.json({ price: fb });
         res.status(502).json({ error: 'Failed to fetch live price' });
     }
 });
@@ -749,6 +767,31 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
     });
 });
 
+// Tickers that pay on a monthly schedule — dividends are plotted at actual amounts, never spread.
+// For these tickers, a payment dated the 1st or 2nd of a month is attributed to the prior month
+// (e.g. STRC's June 1st payment counts as May's dividend).
+const KNOWN_MONTHLY_PAYERS = new Set(['SATA', 'STRC']);
+
+// Don't show the current month in charts until at least 14 days have passed — a single day of
+// data makes bar/line charts collapse visually. Returns YYYY-MM of the last chartable month.
+function chartEndMonth(): string {
+    const today = new Date();
+    const day = today.getDate();
+    const y = today.getFullYear();
+    const m = today.getMonth() + 1;
+    if (day >= 14) return `${y}-${String(m).padStart(2, '0')}`;
+    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+function effectiveDividendMonth(date: string, ticker: string): string {
+    const raw = date.substring(0, 7);
+    if (!KNOWN_MONTHLY_PAYERS.has(ticker)) return raw;
+    const day = parseInt(date.substring(8, 10), 10);
+    if (day > 2) return raw;
+    const [y, m] = raw.split('-').map(Number);
+    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
 // GET synthetic monthly dividend income (for charting).
 // Monthly payers (>=75% of available months paid): use actual per-month amounts.
 // Non-monthly payers (quarterly, annual, sporadic): spread each year's total evenly
@@ -768,7 +811,7 @@ app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
     // Build full month range: first dividend month → today
     const sorted = [...divTxns].sort((a, b) => a.date.localeCompare(b.date));
     const firstMonth = sorted[0].date.substring(0, 7);
-    const todayStr = new Date().toISOString().substring(0, 7);
+    const todayStr = chartEndMonth();
     const allMonths: string[] = [];
     {
         let cur = firstMonth;
@@ -782,16 +825,13 @@ app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
     // Group dividends: ticker → year → month → amount
     const tickerYearMap: Record<string, Record<string, Record<string, number>>> = {};
     for (const t of divTxns) {
-        const month = t.date.substring(0, 7);
+        const month = effectiveDividendMonth(t.date, t.ticker);
         const year = month.substring(0, 4);
         if (!tickerYearMap[t.ticker]) tickerYearMap[t.ticker] = {};
         if (!tickerYearMap[t.ticker][year]) tickerYearMap[t.ticker][year] = {};
         const prev = tickerYearMap[t.ticker][year][month] ?? 0;
         tickerYearMap[t.ticker][year][month] = +(prev + t.price * t.quantity).toFixed(2);
     }
-
-    // Tickers known to pay monthly — always use actual amounts, never spread
-    const KNOWN_MONTHLY_PAYERS = new Set(['SATA', 'STRC']);
 
     // Accumulate into result
     const result: Record<string, number> = {};
@@ -847,7 +887,7 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
 
     const sorted = [...divTxns].sort((a, b) => a.date.localeCompare(b.date));
     const firstMonth = sorted[0].date.substring(0, 7);
-    const todayStr = new Date().toISOString().substring(0, 7);
+    const todayStr = chartEndMonth();
     const allMonths: string[] = [];
     {
         let cur = firstMonth;
@@ -861,15 +901,13 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
     // ticker → year → month → raw amount
     const tickerYearMap: Record<string, Record<string, Record<string, number>>> = {};
     for (const t of divTxns) {
-        const month = t.date.substring(0, 7);
+        const month = effectiveDividendMonth(t.date, t.ticker);
         const year = month.substring(0, 4);
         if (!tickerYearMap[t.ticker]) tickerYearMap[t.ticker] = {};
         if (!tickerYearMap[t.ticker][year]) tickerYearMap[t.ticker][year] = {};
         const prev = tickerYearMap[t.ticker][year][month] ?? 0;
         tickerYearMap[t.ticker][year][month] = +(prev + t.price * t.quantity).toFixed(2);
     }
-
-    const KNOWN_MONTHLY_PAYERS = new Set(['SATA', 'STRC']);
 
     const tickerResult: Record<string, Record<string, number>> = {};
     const totalResult: Record<string, number> = {};
@@ -940,7 +978,7 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
 
     // Build month range from first transaction to today
     const firstMonth = sorted[0].date.substring(0, 7);
-    const todayStr = new Date().toISOString().substring(0, 7);
+    const todayStr = chartEndMonth();
     const months: string[] = [];
     {
         let cur = firstMonth;
