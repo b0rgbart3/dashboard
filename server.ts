@@ -387,6 +387,69 @@ app.patch('/api/stocks/:ticker', (req: Request, res: Response) => {
     }));
 });
 
+app.get('/api/price/chart/:ticker', async (req: Request, res: Response) => {
+    const { ticker } = req.params;
+    const period = (req.query.period as string) || '3m';
+    const yfTicker = toYfTicker(ticker);
+
+    const now = new Date();
+    let period1: Date;
+    let interval: '5m' | '30m' | '1d' | '1wk' | '1mo';
+
+    switch (period) {
+        case '1d':
+            period1 = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+            interval = '5m';
+            break;
+        case '1w':
+            period1 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            interval = '30m';
+            break;
+        case '1m':
+            period1 = new Date(now); period1.setMonth(now.getMonth() - 1);
+            interval = '1d';
+            break;
+        case '3m':
+            period1 = new Date(now); period1.setMonth(now.getMonth() - 3);
+            interval = '1d';
+            break;
+        case 'ytd':
+            period1 = new Date(now.getFullYear(), 0, 1);
+            interval = '1d';
+            break;
+        case '1y':
+            period1 = new Date(now); period1.setFullYear(now.getFullYear() - 1);
+            interval = '1d';
+            break;
+        case '5y':
+            period1 = new Date(now); period1.setFullYear(now.getFullYear() - 5);
+            interval = '1wk';
+            break;
+        case 'max':
+            period1 = new Date('1970-01-01');
+            interval = '1mo';
+            break;
+        default:
+            period1 = new Date(now); period1.setMonth(now.getMonth() - 3);
+            interval = '1d';
+    }
+
+    try {
+        const result = await withTimeout(
+            yahooFinance.chart(yfTicker, { period1, period2: now, interval }),
+            15000
+        );
+        const quotes = result?.quotes ?? [];
+        const data = (quotes as Array<{ close?: number | null; date: Date }>)
+            .filter(q => q.close != null)
+            .map(q => ({ timestamp: q.date.getTime(), price: q.close as number }));
+        res.json({ data });
+    } catch (err: unknown) {
+        console.error('[price/chart]', ticker, err);
+        res.status(502).json({ error: 'Failed to fetch price history' });
+    }
+});
+
 app.get('/api/price/:ticker', async (req: Request, res: Response) => {
     const { ticker } = req.params;
     const yfTicker = toYfTicker(ticker);

@@ -6,6 +6,7 @@ import ProjectionView from "./components/ProjectionView";
 import StockNavigator from "./components/StockNavigator";
 import AddStockModal from "./components/AddStockModal";
 import FilterBar from "./components/FilterBar";
+import PriceChart from "./components/PriceChart";
 import {
   Plus,
   History,
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 
 const PRICE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -146,6 +148,7 @@ const Dashboard = ({
   const currentPrice = livePrice ?? lastPurchasePrice;
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const [priceChartOpen, setPriceChartOpen] = useState<boolean>(true);
   const [transactionsOpen, setTransactionsOpen] = useState<boolean>(false);
   const [accumulationOpen, setAccumulationOpen] = useState<boolean>(false);
   const [annualGrowthOpen, setAnnualGrowthOpen] = useState<boolean>(false);
@@ -856,6 +859,30 @@ const Dashboard = ({
         <main className="grid gap-4">
           <section
             className="glass-card"
+            style={{ paddingBottom: priceChartOpen ? undefined : 0 }}
+          >
+            <div
+              className="accordion-header"
+              style={{ marginBottom: priceChartOpen ? undefined : 0 }}
+              onClick={() => setPriceChartOpen((prev) => !prev)}
+            >
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
+                <TrendingUp className="text-accent-blue" size={24} />
+                <h2>Price Chart</h2>
+              </div>
+              {priceChartOpen ? (
+                <ChevronUp size={18} />
+              ) : (
+                <ChevronDown size={18} />
+              )}
+            </div>
+            {priceChartOpen && <PriceChart ticker={currentTicker} />}
+          </section>
+
+          <section
+            className="glass-card"
             style={{ paddingBottom: transactionsOpen ? undefined : 0 }}
           >
             <div
@@ -998,6 +1025,24 @@ const Dashboard = ({
                       Total Spent
                     </span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      style={{
+                        width: "24px",
+                        height: "3px",
+                        background: "var(--data-minor)",
+                        borderRadius: "2px",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      Share Count
+                    </span>
+                  </div>
                   {hasDividendData && (
                     <>
                       <div className="flex items-center gap-2">
@@ -1102,6 +1147,16 @@ const Dashboard = ({
                           tickFormatter={(value) => `$${value}`}
                         />
                       )}
+                      <YAxis
+                        yAxisId="shares"
+                        orientation="right"
+                        stroke="var(--data-minor)"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        hide={hasDividendData}
+                        tickFormatter={(v) => `${Number(v).toFixed(0)}`}
+                      />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: "var(--bg-card)",
@@ -1121,6 +1176,7 @@ const Dashboard = ({
                             "Current Value": "var(--brand-primary)",
                             "Dividends Received": "var(--success)",
                             "Last Dividend": "var(--warning)",
+                            "Share Count": "var(--data-minor)",
                           };
                           const order = hasDividendData
                             ? [
@@ -1128,8 +1184,9 @@ const Dashboard = ({
                                 "Total Spent",
                                 "Dividends Received",
                                 "Last Dividend",
+                                "Share Count",
                               ]
-                            : ["Current Value", "Total Spent"];
+                            : ["Current Value", "Total Spent", "Share Count"];
                           const filteredPayload = hasDividendData
                             ? payload
                             : payload.filter(
@@ -1198,14 +1255,21 @@ const Dashboard = ({
                                         fontWeight: 600,
                                       }}
                                     >
-                                      $
-                                      {(entry.value as number).toLocaleString(
-                                        "en-US",
-                                        {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        },
-                                      )}
+                                      {entry.name === "Share Count"
+                                        ? (entry.value as number).toLocaleString(
+                                            "en-US",
+                                            {
+                                              minimumFractionDigits: 0,
+                                              maximumFractionDigits: 4,
+                                            },
+                                          )
+                                        : `$${(entry.value as number).toLocaleString(
+                                            "en-US",
+                                            {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            },
+                                          )}`}
                                     </span>
                                   </div>
                                 ))}
@@ -1257,6 +1321,15 @@ const Dashboard = ({
                           />
                         </>
                       )}
+                      <Area
+                        yAxisId="shares"
+                        type="stepAfter"
+                        dataKey="qty"
+                        stroke="var(--data-minor)"
+                        fill="transparent"
+                        strokeWidth={2}
+                        name="Share Count"
+                      />
                       {splitMarkers.map((marker) => (
                         <ReferenceLine
                           key={marker.timestamp}

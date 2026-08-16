@@ -37,6 +37,42 @@ interface BenchmarkPoint {
   nasdaqAnn: number;
 }
 
+type PgotPeriod = "ytd" | "1y" | "2y" | "5y" | "all";
+
+const PGOT_PERIODS: { key: PgotPeriod; label: string }[] = [
+  { key: "ytd", label: "YTD" },
+  { key: "1y", label: "1Y" },
+  { key: "2y", label: "2Y" },
+  { key: "5y", label: "5Y" },
+  { key: "all", label: "ALL" },
+];
+
+function getPgotWindowStart(period: PgotPeriod): string | null {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  switch (period) {
+    case "ytd":
+      return `${now.getFullYear()}-01`;
+    case "1y": {
+      const d = new Date(now);
+      d.setFullYear(d.getFullYear() - 1);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    }
+    case "2y": {
+      const d = new Date(now);
+      d.setFullYear(d.getFullYear() - 2);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    }
+    case "5y": {
+      const d = new Date(now);
+      d.setFullYear(d.getFullYear() - 5);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    }
+    case "all":
+      return null;
+  }
+}
+
 const PIE_COLORS = [
   "var(--chart-1)",
   "var(--chart-2)",
@@ -337,6 +373,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
   const [openModal, setOpenModal] = useState<
     "growth" | "dividends" | "holdings" | "annualized" | null
   >(null);
+  const [pgotPeriod, setPgotPeriod] = useState<PgotPeriod>("all");
 
   useEffect(() => {
     Promise.all([
@@ -414,6 +451,16 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     (_, i) => i % histStride === 0 || i === histWithPnl.length - 1,
   );
 
+  const pgotWindowStart = getPgotWindowStart(pgotPeriod);
+  const pgotRawFiltered = pgotWindowStart
+    ? histWithPnl.filter((r) => r.month >= pgotWindowStart)
+    : histWithPnl;
+  const pgotStride =
+    pgotRawFiltered.length > 48 ? Math.ceil(pgotRawFiltered.length / 48) : 1;
+  const filteredHistory = pgotRawFiltered.filter(
+    (_, i) => i % pgotStride === 0 || i === pgotRawFiltered.length - 1,
+  );
+
   // --- Chart 3: Dividend lines data ---
   const MINOR_DIV_TICKERS = new Set(["AAPL", "GOOG", "GOOGL", "LLY"]);
   const top5Tickers = Object.entries(summaries)
@@ -442,9 +489,9 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
 
   let pgotCagr: number | null = null;
   let pgotCurrentValue: number | null = null;
-  if (!loading && thinHistory.length >= 2) {
-    const last = thinHistory[thinHistory.length - 1];
-    const first = thinHistory.find((r) => r.totalValue > 0);
+  if (!loading && filteredHistory.length >= 2) {
+    const last = filteredHistory[filteredHistory.length - 1];
+    const first = filteredHistory.find((r) => r.totalValue > 0);
     if (first && last.totalInvested > 0) {
       const roi = (last.totalValue - last.totalInvested) / last.totalInvested;
       const [fy, fm] = first.month.split("-").map(Number);
@@ -567,8 +614,10 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
           >
             <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="var(--chart-stroke-faint)"
+              strokeDasharray="4 2"
+              stroke="#add5ff"
+              strokeWidth={5}
+              strokeOpacity={1}
             />
             <XAxis
               dataKey="month"
@@ -650,10 +699,10 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
       >
         <div style={chartTitleStyle}>Portfolio Growth Over Time</div>
         {!loading &&
-          thinHistory.length >= 2 &&
+          filteredHistory.length >= 2 &&
           (() => {
-            const last = thinHistory[thinHistory.length - 1];
-            const first = thinHistory.find((r) => r.totalValue > 0);
+            const last = filteredHistory[filteredHistory.length - 1];
+            const first = filteredHistory.find((r) => r.totalValue > 0);
             if (!first || last.totalInvested === 0) return null;
             const roi =
               (last.totalValue - last.totalInvested) / last.totalInvested;
@@ -744,7 +793,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         <div style={spinnerWrapStyle}>
           <div className="spinner" />
         </div>
-      ) : thinHistory.length === 0 ? (
+      ) : filteredHistory.length === 0 ? (
         <div style={spinnerWrapStyle}>
           <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
             No history data
@@ -757,12 +806,15 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             height={fillChart ? "100%" : chartHeight}
           >
             <ComposedChart
-              data={thinHistory}
+              data={filteredHistory}
               margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
             >
               <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="var(--chart-stroke-faint)"
+                strokeDasharray="4 2"
+                stroke="#add5ff"
+                strokeWidth={5}
+                strokeOpacity={1}
+                yAxisId="left"
               />
               <XAxis
                 dataKey="month"
@@ -830,6 +882,49 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               />
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+      )}
+      {!loading && filteredHistory.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: "10px",
+            paddingTop: "8px",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          {PGOT_PERIODS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={(e) => {
+                e.stopPropagation();
+                setPgotPeriod(key);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px 6px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                fontWeight: pgotPeriod === key ? 600 : 400,
+                color:
+                  pgotPeriod === key
+                    ? "var(--brand-primary)"
+                    : "var(--text-muted)",
+                borderBottom:
+                  pgotPeriod === key
+                    ? "2px solid var(--brand-primary)"
+                    : "2px solid transparent",
+                transition: "color 0.15s",
+                letterSpacing: "0.02em",
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       )}
     </>
@@ -913,8 +1008,10 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               margin={{ top: 4, right: 4, left: 0, bottom: 4 }}
             >
               <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="var(--chart-stroke-faint)"
+                strokeDasharray="4 2"
+                stroke="#add5ff"
+                strokeWidth={5}
+                strokeOpacity={1}
               />
               <XAxis
                 dataKey="month"

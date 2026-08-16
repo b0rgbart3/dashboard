@@ -61,7 +61,7 @@ const StockNavigator = ({ stocks, currentIndex, onPrev, onNext, onNavigate, onAd
                     >
                         {stocks.map((s, i) => (
                             <option key={s.ticker} value={i} style={{ background: 'var(--bg-card)', color: 'var(--text)' }}>
-                                {s.name === s.ticker ? s.ticker : `${s.name} (${s.ticker})`}
+                                {s.ticker}
                             </option>
                         ))}
                     </select>
