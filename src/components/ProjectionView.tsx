@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { Transaction, ProjectionSettings } from "../types";
+import { API_BASE } from "../utils/portfolioUtils";
 import type { Dispatch, SetStateAction } from "react";
 
 interface ProjectionViewProps {
@@ -87,7 +88,7 @@ const ProjectionView = ({
       applySettings(cached);
       return;
     }
-    fetch(`http://localhost:5001/api/projection-settings/${ticker}`)
+    fetch(`${API_BASE}/api/projection-settings/${ticker}`)
       .then((res) => res.json())
       .then((settings: ProjectionSettings) => {
         if (settings && Object.keys(settings).length > 0) {
@@ -126,7 +127,7 @@ const ProjectionView = ({
         ...prev,
         [ticker]: settings,
       }));
-      fetch(`http://localhost:5001/api/projection-settings/${ticker}`, {
+      fetch(`${API_BASE}/api/projection-settings/${ticker}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),

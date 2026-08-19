@@ -3,6 +3,7 @@ import Dashboard from './Dashboard'
 import HomePage from './HomePage'
 import DataModeToggle from './components/DataModeToggle'
 import type { FilterValue, Stock, StockSummary, Transaction, ProjectionSettings } from './types'
+import { API_BASE } from './utils/portfolioUtils'
 import './index.css'
 
 function App() {
@@ -41,7 +42,7 @@ function App() {
   // get a chooser; returning visitors' stored choice is resynced against the server (which may
   // have restarted and reverted to its DATA_MODE env default).
   useEffect(() => {
-    fetch('http://localhost:5001/api/data-mode').then(r => r.json()).then(({ mode }: { mode: 'real' | 'mock' }) => {
+    fetch(`${API_BASE}/api/data-mode`).then(r => r.json()).then(({ mode }: { mode: 'real' | 'mock' }) => {
       const stored = localStorage.getItem('dataModeChoice') as 'real' | 'mock' | null
       if (!stored) {
         setDataMode(mode)
@@ -49,7 +50,7 @@ function App() {
         return
       }
       if (stored !== mode) {
-        fetch('http://localhost:5001/api/data-mode', {
+        fetch(`${API_BASE}/api/data-mode`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode: stored }),
@@ -63,7 +64,7 @@ function App() {
   const handleModeSelect = (newMode: 'real' | 'mock') => {
     localStorage.setItem('dataModeChoice', newMode)
     if (newMode !== dataMode) {
-      fetch('http://localhost:5001/api/data-mode', {
+      fetch(`${API_BASE}/api/data-mode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: newMode }),
@@ -76,8 +77,8 @@ function App() {
   useEffect(() => {
     if (dataMode === null || showChooser) return
     Promise.all([
-      fetch('http://localhost:5001/api/stocks').then(r => r.json()),
-      fetch('http://localhost:5001/api/stocks/summary').then(r => r.json()),
+      fetch(`${API_BASE}/api/stocks`).then(r => r.json()),
+      fetch(`${API_BASE}/api/stocks/summary`).then(r => r.json()),
     ]).then(([stocksData, summaryData]: [Stock[], Record<string, StockSummary>]) => {
       setStocks(stocksData)
       setSummaries(summaryData)

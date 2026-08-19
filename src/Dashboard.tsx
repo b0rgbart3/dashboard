@@ -42,6 +42,7 @@ import {
   type FilterValue,
   type ProjectionSettings,
 } from "./types";
+import { API_BASE } from "./utils/portfolioUtils";
 
 interface HistoricalDataPoint {
   timestamp: number; // Unix ms (start of month) — numeric XAxis dataKey
@@ -195,7 +196,7 @@ const Dashboard = ({
         lookedUpTickers.current?.add(stock.ticker);
         try {
           const res = await fetch(
-            `http://localhost:5001/api/lookup/${stock.ticker}`,
+            `${API_BASE}/api/lookup/${stock.ticker}`,
           );
           if (!res.ok) return;
           const { name, description } = (await res.json()) as {
@@ -213,7 +214,7 @@ const Dashboard = ({
               s.ticker === stock.ticker ? { ...s, ...updates } : s,
             ),
           );
-          fetch(`http://localhost:5001/api/stocks/${stock.ticker}`, {
+          fetch(`${API_BASE}/api/stocks/${stock.ticker}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(updates),
@@ -239,7 +240,7 @@ const Dashboard = ({
     }
     setTransactions([]);
     let cancelled = false;
-    fetch(`http://localhost:5001/api/transactions?ticker=${currentTicker}`)
+    fetch(`${API_BASE}/api/transactions?ticker=${currentTicker}`)
       .then((res) => res.json())
       .then((data: Transaction[]) => {
         if (cancelled) return;
@@ -266,7 +267,7 @@ const Dashboard = ({
     }
     setLivePrice(null);
     let cancelled = false;
-    fetch(`http://localhost:5001/api/price/${currentTicker}`)
+    fetch(`${API_BASE}/api/price/${currentTicker}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: { price: number }) => {
         if (cancelled) return;
@@ -287,7 +288,7 @@ const Dashboard = ({
 
   const addTransaction = async (t: Omit<Transaction, "id">): Promise<void> => {
     try {
-      const res = await fetch("http://localhost:5001/api/transactions", {
+      const res = await fetch(`${API_BASE}/api/transactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...t, ticker: currentTicker, id: Date.now() }),
@@ -319,7 +320,7 @@ const Dashboard = ({
         ticker: currentTicker,
         id: Date.now() + i,
       }));
-      const res = await fetch("http://localhost:5001/api/transactions/bulk", {
+      const res = await fetch(`${API_BASE}/api/transactions/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tagged),
@@ -359,7 +360,7 @@ const Dashboard = ({
       return;
     try {
       const res = await fetch(
-        `http://localhost:5001/api/transactions?ticker=${currentTicker}`,
+        `${API_BASE}/api/transactions?ticker=${currentTicker}`,
         { method: "DELETE" },
       );
       if (res.ok) {
@@ -376,7 +377,7 @@ const Dashboard = ({
 
   const deleteEntry = async (id: number): Promise<void> => {
     try {
-      const res = await fetch(`http://localhost:5001/api/transactions/${id}`, {
+      const res = await fetch(`${API_BASE}/api/transactions/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -405,7 +406,7 @@ const Dashboard = ({
         name,
         createdAt: new Date().toISOString().split("T")[0],
       };
-      const res = await fetch("http://localhost:5001/api/stocks", {
+      const res = await fetch(`${API_BASE}/api/stocks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newStock),
@@ -436,7 +437,7 @@ const Dashboard = ({
       return;
     try {
       const res = await fetch(
-        `http://localhost:5001/api/stocks/${currentTicker}`,
+        `${API_BASE}/api/stocks/${currentTicker}`,
         { method: "DELETE" },
       );
       if (res.ok) {
