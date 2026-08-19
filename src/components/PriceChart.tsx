@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   AreaChart,
   Area,
@@ -78,8 +78,10 @@ export default function PriceChart({ ticker }: { ticker: string }) {
   const [data, setData] = useState<PricePoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchData = useCallback(async (t: string, p: Period) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     setData([]);
@@ -87,12 +89,14 @@ export default function PriceChart({ ticker }: { ticker: string }) {
       const res = await fetch(`${API_BASE}/api/price/chart/${t}?period=${p}`);
       if (!res.ok) throw new Error("fetch failed");
       const json = await res.json();
+      if (requestId !== requestIdRef.current) return;
       setData(json.data ?? []);
     } catch {
+      if (requestId !== requestIdRef.current) return;
       setError("Unable to load price chart");
       setData([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 

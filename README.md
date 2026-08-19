@@ -26,6 +26,12 @@ Model how your portfolio will grow over time with a configurable projection engi
 
 All projection inputs are editable directly in the UI. Tweak monthly investment amount, expected price, or dividend reinvestment rate and the projection updates instantly, letting you explore different accumulation scenarios without leaving the page.
 
+## Tech Stack
+
+- **Frontend:** React 19 + TypeScript, built with Vite, charts via Recharts, icons via Lucide
+- **Backend:** Express 5 (TypeScript, run with `tsx`), live price data from Yahoo Finance (`yahoo-finance2`)
+- **Tooling:** ESLint for linting, `tsc` for type checking
+
 ## Screenshots
 
 ![Transaction History](screenshot1.jpg)

@@ -124,9 +124,22 @@ const Ticker = ({
 }: TickerProps) => {
   const [showDesc, setShowDesc] = useState(false);
   const netInvested = totalInvested - sellProceeds;
-  const totalGainDollars = marketValue + cashIncome - withheldTax - netInvested;
+  const totalGainDollars =
+    marketValue + cashIncome + dividendIncome - withheldTax - netInvested;
   const totalReturn =
-    totalInvested > 0 ? (totalGainDollars / totalInvested) * 100 : null;
+    netInvested > 0 ? (totalGainDollars / netInvested) * 100 : null;
+
+  // Price-only return (unrealized gain/loss vs. average cost), excluding
+  // dividends/income — mirrors how brokerages like Robinhood typically
+  // display "Total Return" on a position.
+  const priceReturnBasis =
+    avgPurchasePrice !== null ? avgPurchasePrice * totalShares : null;
+  const priceGainDollars =
+    priceReturnBasis !== null ? marketValue - priceReturnBasis : null;
+  const priceReturnPct =
+    priceGainDollars !== null && priceReturnBasis !== null && priceReturnBasis > 0
+      ? (priceGainDollars / priceReturnBasis) * 100
+      : null;
 
   const yearsHeld = earliestPurchaseDate
     ? (Date.now() - new Date(earliestPurchaseDate).getTime()) /
@@ -413,6 +426,24 @@ const Ticker = ({
                 {fmtPct(totalReturn)}
               </span>
             </Row>
+            {priceGainDollars !== null && (
+              <Row label="Price Gain">
+                <span
+                  style={{ ...VALUE_STYLE, color: gainColor(priceGainDollars) }}
+                >
+                  {fmtGain$(priceGainDollars)}
+                </span>
+              </Row>
+            )}
+            {priceReturnPct !== null && (
+              <Row label="Price Return">
+                <span
+                  style={{ ...VALUE_STYLE, color: gainColor(priceReturnPct) }}
+                >
+                  {fmtPct(priceReturnPct)}
+                </span>
+              </Row>
+            )}
             {hasAnnualized && (
               <div style={DIVIDER_STYLE}>
                 <Row label="Avg Ann Return">

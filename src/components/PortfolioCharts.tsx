@@ -5,6 +5,7 @@ import {
   ComposedChart,
   LineChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -30,6 +31,11 @@ interface DividendDataPoint {
   [ticker: string]: number | string;
 }
 
+interface RealizedPnlPoint {
+  month: string;
+  realizedPnL: number;
+}
+
 interface BenchmarkPoint {
   month: string;
   portfolioAnn: number;
@@ -37,9 +43,11 @@ interface BenchmarkPoint {
   nasdaqAnn: number;
 }
 
-type PgotPeriod = "ytd" | "1y" | "2y" | "5y" | "all";
+type PgotPeriod = "3m" | "6m" | "ytd" | "1y" | "2y" | "5y" | "all";
 
 const PGOT_PERIODS: { key: PgotPeriod; label: string }[] = [
+  { key: "3m", label: "3M" },
+  { key: "6m", label: "6M" },
   { key: "ytd", label: "YTD" },
   { key: "1y", label: "1Y" },
   { key: "2y", label: "2Y" },
@@ -51,6 +59,16 @@ function getPgotWindowStart(period: PgotPeriod): string | null {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   switch (period) {
+    case "3m": {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 3);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    }
+    case "6m": {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 6);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    }
     case "ytd":
       return `${now.getFullYear()}-01`;
     case "1y": {
@@ -307,6 +325,30 @@ function Pie3D({
   );
 }
 
+// Bar shape for Realized P&L layer — literal green for profit months, red for loss
+// months (an intentional exception to this dashboard's usual red-free palette, since
+// green/red is the unambiguous market convention for gain/loss).
+// (Cell is deprecated in recharts 3.x; shape is the replacement for per-datum styling).
+function RealizedPnlBar(props: {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: { realizedPnL?: number };
+}) {
+  const { x = 0, y = 0, width = 0, height = 0, payload } = props;
+  const value = payload?.realizedPnL ?? 0;
+  const fill = value >= 0 ? "#22c55e" : "#ef4444";
+  // Recharts' built-in Rectangle normalizes negative width/height during animation
+  // frames (bars crossing the zero baseline); a bare <rect> must do the same or SVG
+  // rejects the negative attribute and silently drops the element mid-animation.
+  const safeWidth = Math.abs(width);
+  const safeHeight = Math.abs(height);
+  const safeX = width < 0 ? x + width : x;
+  const safeY = height < 0 ? y + height : y;
+  return <rect x={safeX} y={safeY} width={safeWidth} height={safeHeight} fill={fill} />;
+}
+
 function fmtMonth(m: string): string {
   const [y, mo] = m.split("-");
   const names = [
@@ -370,6 +412,13 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     DividendDataPoint[] | null
   >(null);
   const [benchmark, setBenchmark] = useState<BenchmarkPoint[] | null>(null);
+  const [realizedPnl, setRealizedPnl] = useState<RealizedPnlPoint[] | null>(
+    null,
+  );
+  const [periodReturns, setPeriodReturns] = useState<Record<
+    PgotPeriod,
+    number
+  > | null>(null);
   const [openModal, setOpenModal] = useState<
     "growth" | "dividends" | "holdings" | "annualized" | null
   >(null);
@@ -400,6 +449,16 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
       .then((r) => r.json())
       .then((bench) => setBenchmark(bench as BenchmarkPoint[]))
       .catch(() => setBenchmark([]));
+
+    fetch(`${API_BASE}/api/portfolio/monthly-realized-pnl`)
+      .then((r) => r.json())
+      .then((pnl) => setRealizedPnl(pnl as RealizedPnlPoint[]))
+      .catch(() => setRealizedPnl([]));
+
+    fetch(`${API_BASE}/api/portfolio/period-returns`)
+      .then((r) => r.json())
+      .then((pr) => setPeriodReturns(pr as Record<PgotPeriod, number>))
+      .catch(() => setPeriodReturns({} as Record<PgotPeriod, number>));
   }, []);
 
   useEffect(() => {
@@ -431,7 +490,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     marketValue: d.value,
     fill:
       d.name === "Other"
-        ? "var(--data-peripheral)"
+        ? "var(--chart-other)"
         : i === 0
           ? "var(--data-supreme)"
           : PIE_COLORS[(i - 1) % PIE_COLORS.length],
@@ -440,10 +499,20 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
   // --- Chart 2: thin history ---
   const displayHistory: MonthlyValue[] = history ?? [];
 
-  const histWithPnl = displayHistory.map((row) => ({
-    ...row,
-    pnl: row.totalValue - row.totalInvested,
-  }));
+  const realizedByMonth = new Map(
+    (realizedPnl ?? []).map((r) => [r.month, r.realizedPnL]),
+  );
+  let cumRealized = 0;
+  const histWithPnl = displayHistory.map((row) => {
+    const realizedPnL = realizedByMonth.get(row.month) ?? 0;
+    cumRealized += realizedPnL;
+    return {
+      ...row,
+      pnl: row.totalValue - row.totalInvested,
+      realizedPnL,
+      cumRealizedPnL: +cumRealized.toFixed(2),
+    };
+  });
 
   const histStride =
     histWithPnl.length > 48 ? Math.ceil(histWithPnl.length / 48) : 1;
@@ -457,9 +526,25 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     : histWithPnl;
   const pgotStride =
     pgotRawFiltered.length > 48 ? Math.ceil(pgotRawFiltered.length / 48) : 1;
-  const filteredHistory = pgotRawFiltered.filter(
-    (_, i) => i % pgotStride === 0 || i === pgotRawFiltered.length - 1,
-  );
+  // Bucket (rather than sample) so months skipped for display still contribute
+  // their realized P&L to the retained bar instead of vanishing from the chart.
+  const filteredHistory =
+    pgotStride <= 1
+      ? pgotRawFiltered
+      : Array.from(
+          { length: Math.ceil(pgotRawFiltered.length / pgotStride) },
+          (_, i) => {
+            const bucket = pgotRawFiltered.slice(
+              i * pgotStride,
+              Math.min((i + 1) * pgotStride, pgotRawFiltered.length),
+            );
+            const last = bucket[bucket.length - 1];
+            return {
+              ...last,
+              realizedPnL: bucket.reduce((s, r) => s + r.realizedPnL, 0),
+            };
+          },
+        );
 
   // --- Chart 3: Dividend lines data ---
   const MINOR_DIV_TICKERS = new Set(["AAPL", "GOOG", "GOOGL", "LLY"]);
@@ -475,6 +560,21 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     .slice(0, 4)
     .map(([ticker]) => ticker);
 
+  // Fixed legend/tooltip order for the MDI chart; anything outside this list keeps its
+  // income-ranked position appended after the known tickers.
+  const DIVIDEND_TICKER_ORDER = ["STRC", "SATA", "TSM", "RHHBY"];
+  const orderedDividendTickers = [...top5Tickers].sort((a, b) => {
+    const ai = DIVIDEND_TICKER_ORDER.indexOf(a);
+    const bi = DIVIDEND_TICKER_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+  // Recharts doesn't reliably order the Legend/Tooltip payload by JSX position, so both are
+  // forced explicitly from this same key order (Mo. Total first, then the fixed ticker order).
+  const dividendOrderKeys = ["total", ...orderedDividendTickers];
+
   const dividendData: DividendDataPoint[] = dividendsByTicker ?? [];
 
   const DIV_COLORS = [
@@ -487,22 +587,39 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
   const loading =
     history === null || monthlyDivs === null || dividendsByTicker === null;
 
+  // Since-inception stats (ROI/CAGR) are intentionally computed off the full, unwindowed
+  // histWithPnl rather than filteredHistory — they're meant to stay stable as a fixed
+  // reference point regardless of which period tab (YTD/1Y/etc.) is selected. Mixing a
+  // period-scoped time span with the since-inception ROI figure previously produced
+  // nonsensical annualized numbers (e.g. "+380%/yr") whenever a short period was selected.
+  let pgotRoi: number | null = null;
   let pgotCagr: number | null = null;
   let pgotCurrentValue: number | null = null;
-  if (!loading && filteredHistory.length >= 2) {
-    const last = filteredHistory[filteredHistory.length - 1];
-    const first = filteredHistory.find((r) => r.totalValue > 0);
+  let pgotYears: number | null = null;
+  if (!loading && histWithPnl.length >= 2) {
+    const last = histWithPnl[histWithPnl.length - 1];
+    const first = histWithPnl.find((r) => r.totalValue > 0);
     if (first && last.totalInvested > 0) {
       const roi = (last.totalValue - last.totalInvested) / last.totalInvested;
+      pgotRoi = roi * 100;
       const [fy, fm] = first.month.split("-").map(Number);
       const [ly, lm] = last.month.split("-").map(Number);
       const years = (ly * 12 + lm - (fy * 12 + fm)) / 12;
       if (years > 0) {
         pgotCagr = ((1 + roi) ** (1 / years) - 1) * 100;
         pgotCurrentValue = last.totalValue;
+        pgotYears = years;
       }
     }
   }
+
+  // % change across the selected period (YTD/1Y/2Y/5Y/ALL) — a time-weighted return computed
+  // server-side at daily granularity from the actual transaction dates (see
+  // /api/portfolio/period-returns). A monthly-bucketed version of this used to live here, but for
+  // an active, volatile portfolio like this one, approximating *when in the month* each
+  // contribution landed swung the all-time figure from -64% to +499% to +6738% depending purely
+  // on that guess — none of them trustworthy. Daily granularity removes the guess entirely.
+  const pgotPeriodChangePct: number | null = periodReturns?.[pgotPeriod] ?? null;
 
   const benchmarkLoading = benchmark === null;
   const benchmarkPoints = benchmark ?? [];
@@ -532,6 +649,46 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     benchmarkPoints.length > 0
       ? benchmarkPoints[benchmarkPoints.length - 1]
       : null;
+
+  // Explicit left-axis domain (dollars: Portfolio Value / Net Invested / Mkt Gain), so
+  // we know exactly where its zero baseline sits and can line up the right axis to match.
+  const leftValues = filteredHistory.flatMap((r) => [
+    r.totalValue,
+    r.totalInvested,
+    r.pnl,
+    r.cumRealizedPnL,
+  ]);
+  const leftMin = leftValues.length > 0 ? Math.min(...leftValues, 0) : 0;
+  const leftMax = leftValues.length > 0 ? Math.max(...leftValues, 0) : 1;
+  const leftPad = Math.max(1, (leftMax - leftMin) * 0.08);
+  const leftDomain: [number, number] = [leftMin - leftPad, leftMax + leftPad];
+  const zeroFraction = Math.min(
+    0.98,
+    Math.max(0.02, (0 - leftDomain[0]) / (leftDomain[1] - leftDomain[0])),
+  );
+
+  // Realized P&L (right-axis bars) domain: sized to fit the data with padding, but
+  // constrained so its zero baseline lands at the same fractional height as the left
+  // axis's zero — otherwise the two axes' zero lines visually diverge.
+  const realizedValues = filteredHistory.map((r) => r.realizedPnL);
+  const realizedMaxRaw =
+    realizedValues.length > 0 ? Math.max(0, ...realizedValues) : 0;
+  const realizedMinRaw =
+    realizedValues.length > 0 ? Math.min(0, ...realizedValues) : 0;
+  const requiredMax = Math.max(1, realizedMaxRaw * 1.15);
+  const requiredMin = Math.min(-1, realizedMinRaw * 1.15);
+  let realizedMaxDomain = requiredMax;
+  let realizedMinDomain =
+    (-zeroFraction / (1 - zeroFraction)) * realizedMaxDomain;
+  if (realizedMinDomain > requiredMin) {
+    realizedMinDomain = requiredMin;
+    realizedMaxDomain =
+      (-realizedMinDomain * (1 - zeroFraction)) / zeroFraction;
+  }
+  const realizedDomain: [number, number] = [
+    realizedMinDomain,
+    realizedMaxDomain,
+  ];
 
   // --- Render helpers for expandable charts ---
 
@@ -594,7 +751,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             marginLeft: "auto",
           }}
         >
-          Lump-sum from portfolio start · starts 1yr in
+          Time-weighted, annualized · starts 1yr in
         </span>
       </div>
       {benchmarkLoading ? (
@@ -699,18 +856,8 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
       >
         <div style={chartTitleStyle}>Portfolio Growth Over Time</div>
         {!loading &&
-          filteredHistory.length >= 2 &&
+          pgotRoi !== null &&
           (() => {
-            const last = filteredHistory[filteredHistory.length - 1];
-            const first = filteredHistory.find((r) => r.totalValue > 0);
-            if (!first || last.totalInvested === 0) return null;
-            const roi =
-              (last.totalValue - last.totalInvested) / last.totalInvested;
-            const [fy, fm] = first.month.split("-").map(Number);
-            const [ly, lm] = last.month.split("-").map(Number);
-            const years = (ly * 12 + lm - (fy * 12 + fm)) / 12;
-            const cagr =
-              years > 0 ? ((1 + roi) ** (1 / years) - 1) * 100 : null;
             const statStyle = (val: number): React.CSSProperties => ({
               fontSize: "0.78rem",
               fontWeight: 700,
@@ -724,19 +871,19 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             return (
               <>
                 <span
-                  style={statStyle(roi * 100)}
-                  title="Total return: (current value − total invested) ÷ total invested"
+                  style={statStyle(pgotRoi)}
+                  title="Total return since inception: (current value − total invested) ÷ total invested"
                 >
-                  {roi >= 0 ? "+" : ""}
-                  {(roi * 100).toFixed(1)}% ROI
+                  {pgotRoi >= 0 ? "+" : ""}
+                  {pgotRoi.toFixed(1)}% ROI
                 </span>
-                {cagr !== null && (
+                {pgotCagr !== null && pgotYears !== null && (
                   <span
-                    style={statStyle(cagr)}
-                    title={`CAGR over ${years.toFixed(1)} years`}
+                    style={statStyle(pgotCagr)}
+                    title={`CAGR since inception, over ${pgotYears.toFixed(1)} years`}
                   >
-                    {cagr >= 0 ? "+" : ""}
-                    {cagr.toFixed(1)}%/yr
+                    {pgotCagr >= 0 ? "+" : ""}
+                    {pgotCagr.toFixed(1)}%/yr
                   </span>
                 )}
               </>
@@ -751,6 +898,12 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
           const projectedDaily = projectedAnnual / 365;
           const color =
             pgotCagr >= 0 ? "var(--success)" : "var(--brand-primary)";
+          const periodLabel =
+            PGOT_PERIODS.find((p) => p.key === pgotPeriod)?.label ?? "";
+          const periodColor =
+            pgotPeriodChangePct !== null && pgotPeriodChangePct >= 0
+              ? "#22c55e"
+              : "#ef4444";
           return (
             <div
               style={{
@@ -786,6 +939,15 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 })}{" "}
                 day
               </span>
+              {pgotPeriodChangePct !== null && (
+                <span
+                  style={{ fontWeight: 700, color: periodColor, marginLeft: "6px" }}
+                  title={`Portfolio value change over ${periodLabel}`}
+                >
+                  {pgotPeriodChangePct >= 0 ? "+" : ""}
+                  {pgotPeriodChangePct.toFixed(1)}% {periodLabel}
+                </span>
+              )}
             </div>
           );
         })()}
@@ -825,9 +987,26 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
               />
               <YAxis
                 yAxisId="left"
+                domain={leftDomain}
                 tickFormatter={fmtDollar}
                 tick={{ fill: "var(--text-muted)", fontSize: 10 }}
                 width={52}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                domain={realizedDomain}
+                tickFormatter={fmtDollar}
+                tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                width={52}
+                label={{
+                  value: "Realized P&L",
+                  angle: 90,
+                  position: "insideRight",
+                  fill: "var(--text-muted)",
+                  fontSize: 10,
+                  style: { textAnchor: "middle" },
+                }}
               />
               <ReTooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -850,6 +1029,14 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 y={0}
                 stroke="var(--chart-stroke-bright)"
                 strokeWidth={2}
+              />
+              <Bar
+                yAxisId="right"
+                dataKey="realizedPnL"
+                name="Realized P&L"
+                fill="#22c55e"
+                shape={RealizedPnlBar}
+                maxBarSize={18}
               />
               <Line
                 yAxisId="left"
@@ -879,6 +1066,15 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                 dot={false}
                 strokeWidth={2}
                 strokeDasharray="2 2"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="cumRealizedPnL"
+                name="Realized P&L (cum.)"
+                stroke="var(--chart-3)"
+                dot={false}
+                strokeWidth={2}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -1033,6 +1229,11 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   `$${Number(value).toFixed(2)}`,
                   name,
                 ]}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                itemSorter={(item: any) => {
+                  const idx = dividendOrderKeys.indexOf(item.dataKey);
+                  return idx === -1 ? dividendOrderKeys.length : idx;
+                }}
                 contentStyle={{
                   background: "var(--bg-card)",
                   border: "1px solid var(--border)",
@@ -1040,8 +1241,26 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   fontSize: "0.8rem",
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: "0.75rem", paddingTop: 4 }} />
-              {top5Tickers.map((ticker, i) => (
+              <Legend
+                wrapperStyle={{ fontSize: "0.75rem", paddingTop: 4 }}
+                itemSorter={(item) => {
+                  const idx = dividendOrderKeys.indexOf(
+                    String(item.dataKey ?? ""),
+                  );
+                  return idx === -1 ? dividendOrderKeys.length : idx;
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="total"
+                name="Mo. Total"
+                stroke="var(--chart-8)"
+                dot={false}
+                strokeWidth={2.5}
+                strokeDasharray="4 2"
+                connectNulls
+              />
+              {orderedDividendTickers.map((ticker, i) => (
                 <Line
                   key={ticker}
                   type="monotone"
@@ -1053,16 +1272,6 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
                   connectNulls
                 />
               ))}
-              <Line
-                type="monotone"
-                dataKey="total"
-                name="Mo. Total"
-                stroke="var(--chart-8)"
-                dot={false}
-                strokeWidth={2.5}
-                strokeDasharray="4 2"
-                connectNulls
-              />
             </LineChart>
           </ResponsiveContainer>
         </div>

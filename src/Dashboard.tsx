@@ -44,13 +44,14 @@ import {
 } from "./types";
 
 interface HistoricalDataPoint {
-  timestamp: number; // Unix ms — numeric XAxis dataKey
-  displayDate: string; // "Mar 17, 2026" — for tooltip label
+  timestamp: number; // Unix ms (start of month) — numeric XAxis dataKey
+  displayDate: string; // "Mar 2026" — for tooltip label
   value: number;
   cost: number;
   qty: number;
   dividendValue: number;
   lastDividendAmount: number | null; // most recent single dividend payment; null before first dividend
+  monthlyDividendAmount: number; // sum of all dividend payments received within this month
 }
 
 interface DashboardProps {
@@ -531,9 +532,13 @@ const Dashboard = ({
   };
 
   const getHistoricalData = (): HistoricalDataPoint[] => {
-    // Independent dividend payment history: date → total paid that day.
-    // Completely separate from all other calculations.
+    // Independent dividend payment history: date → total paid that day,
+    // and month ("yyyy-MM") → total paid that month. Completely separate
+    // from all other calculations. Monthly totals normalize payment-cadence
+    // changes (e.g. a ticker switching from one monthly payment to two
+    // smaller semi-monthly ones) so the chart reads the same either way.
     const dividendByDay = new Map<string, number>();
+    const dividendByMonth = new Map<string, number>();
     for (const t of transactions) {
       if (
         t.type === "dividend" ||
@@ -541,9 +546,12 @@ const Dashboard = ({
         t.type === "CDIV" ||
         t.type === "RETURN_OF_CAPITAL"
       ) {
-        dividendByDay.set(
-          t.date,
-          (dividendByDay.get(t.date) ?? 0) + t.price * t.quantity,
+        const amount = t.price * t.quantity;
+        dividendByDay.set(t.date, (dividendByDay.get(t.date) ?? 0) + amount);
+        const monthKey = t.date.slice(0, 7);
+        dividendByMonth.set(
+          monthKey,
+          (dividendByMonth.get(monthKey) ?? 0) + amount,
         );
       }
     }
@@ -603,7 +611,10 @@ const Dashboard = ({
     let runningDividendValue = 0;
     let lastKnownPrice = 0;
     let lastDividendAmount: number | null = null;
-    const result: HistoricalDataPoint[] = [];
+    // One point per month: cumulative fields (value/cost/qty/dividendValue)
+    // hold the running total as of the last day processed in that month;
+    // monthlyDividendAmount is a flow total summed across the whole month.
+    const monthlyBuckets = new Map<string, HistoricalDataPoint>();
 
     for (const dayKey of sortedDayKeys) {
       const data = dayMap.get(dayKey)!;
@@ -618,19 +629,28 @@ const Dashboard = ({
       // Last dividend: read directly from the independent dividend history map
       const divPaidToday = dividendByDay.get(dayKey);
       if (divPaidToday) lastDividendAmount = +divPaidToday.toFixed(2);
+
       const parsedDate = parse(dayKey, "yyyy-MM-dd", new Date());
-      result.push({
-        timestamp: parsedDate.getTime(),
-        displayDate: format(parsedDate, "MMM d, yyyy"),
+      const monthKey = dayKey.slice(0, 7);
+      monthlyBuckets.set(monthKey, {
+        timestamp: startOfMonth(parsedDate).getTime(),
+        displayDate: format(parsedDate, "MMM yyyy"),
         value: +(runningQty * lastKnownPrice).toFixed(2),
         cost: +runningCost.toFixed(2),
         qty: runningQty,
         dividendValue: +runningDividendValue.toFixed(2),
         lastDividendAmount,
+        monthlyDividendAmount: +(dividendByMonth.get(monthKey) ?? 0).toFixed(2),
       });
     }
 
-    return result;
+    // Drop the current, still-in-progress month — it only has partial data
+    // (e.g. one of two semi-monthly dividend payments), which would show as
+    // a misleading dip rather than a real trend.
+    const currentMonthKey = format(new Date(), "yyyy-MM");
+    monthlyBuckets.delete(currentMonthKey);
+
+    return [...monthlyBuckets.values()];
   };
 
   const getAnnualGrowthData = () => {
@@ -980,17 +1000,19 @@ const Dashboard = ({
                 }}
               >
                 <div
-                  className="flex items-center gap-4"
                   style={{
                     position: "absolute",
                     top: "8px",
-                    left: "50%",
-                    transform: "translateX(-50%)",
+                    left: "110px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: "4px",
                     zIndex: 1,
                     pointerEvents: "none",
                   }}
                 >
-                  <div className="flex items-center gap-2">
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div
                       style={{
                         width: "24px",
@@ -1007,7 +1029,7 @@ const Dashboard = ({
                       Current Value
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div
                       style={{
                         width: "24px",
@@ -1025,27 +1047,9 @@ const Dashboard = ({
                       Total Spent
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div
-                      style={{
-                        width: "24px",
-                        height: "3px",
-                        background: "var(--data-minor)",
-                        borderRadius: "2px",
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      Share Count
-                    </span>
-                  </div>
                   {hasDividendData && (
                     <>
-                      <div className="flex items-center gap-2">
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <div
                           style={{
                             width: "24px",
@@ -1063,7 +1067,7 @@ const Dashboard = ({
                           Dividends Received
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <div
                           style={{
                             width: "24px",
@@ -1077,11 +1081,29 @@ const Dashboard = ({
                             color: "var(--text-muted)",
                           }}
                         >
-                          Last Dividend
+                          Monthly Dividend
                         </span>
                       </div>
                     </>
                   )}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div
+                      style={{
+                        width: "24px",
+                        height: "3px",
+                        background: "var(--data-minor)",
+                        borderRadius: "2px",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      Share Count
+                    </span>
+                  </div>
                 </div>
                 {historicalData.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-text-secondary italic">
@@ -1175,7 +1197,7 @@ const Dashboard = ({
                             "Total Spent": "var(--brand-accent)",
                             "Current Value": "var(--brand-primary)",
                             "Dividends Received": "var(--success)",
-                            "Last Dividend": "var(--warning)",
+                            "Monthly Dividend": "var(--warning)",
                             "Share Count": "var(--data-minor)",
                           };
                           const order = hasDividendData
@@ -1183,7 +1205,7 @@ const Dashboard = ({
                                 "Current Value",
                                 "Total Spent",
                                 "Dividends Received",
-                                "Last Dividend",
+                                "Monthly Dividend",
                                 "Share Count",
                               ]
                             : ["Current Value", "Total Spent", "Share Count"];
@@ -1192,7 +1214,7 @@ const Dashboard = ({
                             : payload.filter(
                                 (e) =>
                                   e.name !== "Dividends Received" &&
-                                  e.name !== "Last Dividend",
+                                  e.name !== "Monthly Dividend",
                               );
                           return (
                             <div
@@ -1311,12 +1333,12 @@ const Dashboard = ({
                           <Area
                             yAxisId="right"
                             type="stepAfter"
-                            dataKey="lastDividendAmount"
+                            dataKey="monthlyDividendAmount"
                             stroke="var(--warning)"
                             fill="transparent"
                             strokeWidth={2}
                             strokeDasharray="5 5"
-                            name="Last Dividend"
+                            name="Monthly Dividend"
                             connectNulls={false}
                           />
                         </>

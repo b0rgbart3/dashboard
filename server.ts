@@ -19,6 +19,7 @@ const PROJECTION_SETTINGS_FILE = path.join(__dirname, 'data', 'projection-settin
 const SUMMARY_CACHE_FILE = path.join(__dirname, 'data', 'summary-cache.json');
 const HISTORY_CACHE_FILE = path.join(__dirname, 'data', 'portfolio-history-cache.json');
 const BENCHMARK_CACHE_FILE = path.join(__dirname, 'data', 'benchmark-cache.json');
+const PERIOD_RETURNS_CACHE_FILE = path.join(__dirname, 'data', 'period-returns-cache.json');
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -50,6 +51,7 @@ function invalidateSummaryCache() {
     if (fs.existsSync(SUMMARY_CACHE_FILE)) fs.unlinkSync(SUMMARY_CACHE_FILE);
     if (fs.existsSync(HISTORY_CACHE_FILE)) fs.unlinkSync(HISTORY_CACHE_FILE);
     if (fs.existsSync(BENCHMARK_CACHE_FILE)) fs.unlinkSync(BENCHMARK_CACHE_FILE);
+    if (fs.existsSync(PERIOD_RETURNS_CACHE_FILE)) fs.unlinkSync(PERIOD_RETURNS_CACHE_FILE);
 }
 
 // GET transactions (optional ?ticker= filter)
@@ -717,6 +719,13 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
             // ghost position (e.g. 1.5e-05 shares) that falsely marks the position active.
             // Anything under 0.001 shares (~$0.01 at typical prices) is treated as closed.
             if (s.totalShares > 0 && s.totalShares < 0.001) s.totalShares = 0;
+            // A closing SELL for a whole/rounded share count can overshoot the fractional
+            // total built up from years of small DRIP-style buys, leaving a *negative*
+            // residual (e.g. -0.09 shares after selling "all 2 shares" of a position that
+            // was actually 1.91 shares). This portfolio is long-only, so negative shares
+            // always mean the position was fully sold, never a short — clamp to 0
+            // regardless of magnitude, or marketValue below comes out negative.
+            if (s.totalShares < 0) s.totalShares = 0;
 
             const price = livePrices[ticker] ?? s.lastPrice;
             const netInvested = s.totalBuyCost - s.totalSellProceeds;
@@ -832,25 +841,47 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
 
 // Tickers that pay on a monthly schedule — dividends are plotted at actual amounts, never spread.
 // For these tickers, a payment dated the 1st or 2nd of a month is attributed to the prior month
-// (e.g. STRC's June 1st payment counts as May's dividend).
+// (e.g. STRC's June 1st payment counts as May's dividend). This only applies while the ticker is
+// actually paying once a month — see isDailyCadenceMonth() below.
 const KNOWN_MONTHLY_PAYERS = new Set(['SATA', 'STRC']);
 
-// Don't show the current month in charts until at least 14 days have passed — a single day of
-// data makes bar/line charts collapse visually. Returns YYYY-MM of the last chartable month.
+// A ticker can switch from a single monthly payment to a daily/weekday payment schedule mid-history
+// (e.g. SATA started paying daily in mid-June 2026). Once that happens, the 1st/2nd-of-month belongs
+// to that month's own run of daily payments, not the previous month's lump payment — so the
+// prior-month shift below must not apply. A raw calendar month with more than a few payments for a
+// ticker is treated as a daily-cadence month.
+function buildMonthlyPaymentCounts(
+    divTxns: Array<{ ticker: string; date: string }>,
+): Record<string, Record<string, number>> {
+    const counts: Record<string, Record<string, number>> = {};
+    for (const t of divTxns) {
+        const rawMonth = t.date.substring(0, 7);
+        counts[t.ticker] ??= {};
+        counts[t.ticker][rawMonth] = (counts[t.ticker][rawMonth] ?? 0) + 1;
+    }
+    return counts;
+}
+
+// The current calendar month never has a full month of data yet — payers like STRC pay near the
+// end of the month, so even a "mostly through the month" partial total reads as a misleading dip.
+// Always clip charts to the last fully-completed month. Returns YYYY-MM of the last chartable month.
 function chartEndMonth(): string {
     const today = new Date();
-    const day = today.getDate();
     const y = today.getFullYear();
     const m = today.getMonth() + 1;
-    if (day >= 14) return `${y}-${String(m).padStart(2, '0')}`;
     return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 }
 
-function effectiveDividendMonth(date: string, ticker: string): string {
+function effectiveDividendMonth(
+    date: string,
+    ticker: string,
+    monthlyCounts: Record<string, Record<string, number>>,
+): string {
     const raw = date.substring(0, 7);
     if (!KNOWN_MONTHLY_PAYERS.has(ticker)) return raw;
     const day = parseInt(date.substring(8, 10), 10);
     if (day > 2) return raw;
+    if ((monthlyCounts[ticker]?.[raw] ?? 0) > 3) return raw;
     const [y, m] = raw.split('-').map(Number);
     return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 }
@@ -886,9 +917,10 @@ app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
     }
 
     // Group dividends: ticker → year → month → amount
+    const monthlyCounts = buildMonthlyPaymentCounts(divTxns);
     const tickerYearMap: Record<string, Record<string, Record<string, number>>> = {};
     for (const t of divTxns) {
-        const month = effectiveDividendMonth(t.date, t.ticker);
+        const month = effectiveDividendMonth(t.date, t.ticker, monthlyCounts);
         const year = month.substring(0, 4);
         if (!tickerYearMap[t.ticker]) tickerYearMap[t.ticker] = {};
         if (!tickerYearMap[t.ticker][year]) tickerYearMap[t.ticker][year] = {};
@@ -962,9 +994,10 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
     }
 
     // ticker → year → month → raw amount
+    const monthlyCounts = buildMonthlyPaymentCounts(divTxns);
     const tickerYearMap: Record<string, Record<string, Record<string, number>>> = {};
     for (const t of divTxns) {
-        const month = effectiveDividendMonth(t.date, t.ticker);
+        const month = effectiveDividendMonth(t.date, t.ticker, monthlyCounts);
         const year = month.substring(0, 4);
         if (!tickerYearMap[t.ticker]) tickerYearMap[t.ticker] = {};
         if (!tickerYearMap[t.ticker][year]) tickerYearMap[t.ticker][year] = {};
@@ -1020,6 +1053,144 @@ app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Respo
     res.json(output);
 });
 
+// GET monthly realized P&L (from SELL transactions, AVCO cost basis) across the whole portfolio.
+// Mirrors the cost-basis tracking used by /api/stocks/summary but only needs share/cost running
+// totals — dividend income, fees, etc. are irrelevant to realized P&L and are left out.
+function computeMonthlyRealizedPnL(
+    transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>
+): Array<{ month: string; realizedPnL: number }> {
+    if (transactions.length === 0) return [];
+    const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const spinoffSigs = new Set<string>();
+    for (const t of sorted) {
+        if (t.type === 'SPINOFF') spinoffSigs.add(`${t.ticker}::${t.date}::${t.quantity.toFixed(4)}`);
+    }
+    const preMergerQtyMap: Record<string, number> = {};
+    const mrgsNetReceived: Record<string, number> = {};
+    const totalSharesMap: Record<string, number> = {};
+
+    // SHARE_EXCHANGE rows inherit cost basis from the predecessor security (see /api/stocks/summary)
+    const exchangePriceLookup: Record<string, number> = {};
+    const outByKey = new Map<string, string>();
+    for (const t of sorted) {
+        if (t.type === 'SHARE_EXCHANGE_OUT') outByKey.set(`${t.date}|${t.quantity.toFixed(4)}`, t.ticker);
+    }
+    for (const t of sorted) {
+        if (t.type === 'SHARE_EXCHANGE' && t.price === 0) {
+            const predTicker = outByKey.get(`${t.date}|${t.quantity.toFixed(4)}`);
+            if (!predTicker) continue;
+            let rShares = 0, rCost = 0;
+            for (const u of sorted) {
+                if (u.ticker !== predTicker) continue;
+                if (u.date > t.date || (u.date === t.date && u.type === 'SHARE_EXCHANGE_OUT')) break;
+                if (u.type === 'BUY' || u.type === 'purchase' || u.type === 'REC' || u.type === 'MRGS_MERGER' || u.type === 'SPINOFF') {
+                    rShares += u.quantity; rCost += u.price * u.quantity;
+                } else if (u.type === 'SELL') {
+                    if (rShares > 0) { const avg = rCost / rShares; const sold = Math.min(u.quantity, rShares); rCost -= avg * sold; rShares = Math.max(0, rShares - u.quantity); }
+                } else if (u.type === 'SPLIT') {
+                    rShares *= u.quantity;
+                }
+            }
+            if (rShares > 0) exchangePriceLookup[`${t.ticker}|${t.date}`] = rCost / rShares;
+        }
+    }
+
+    const cbTrack: Record<string, { runningShares: number; runningCost: number }> = {};
+    const monthlyBuckets: Record<string, number> = {};
+
+    for (const t of sorted) {
+        if (!cbTrack[t.ticker]) cbTrack[t.ticker] = { runningShares: 0, runningCost: 0 };
+        if (totalSharesMap[t.ticker] === undefined) totalSharesMap[t.ticker] = 0;
+        const cb = cbTrack[t.ticker];
+        const isBuy = t.type === 'BUY' || t.type === 'purchase';
+        const isRec = t.type === 'REC' || t.type === 'MRGS_MERGER' || t.type === 'SPINOFF' || t.type === 'SHARE_EXCHANGE';
+        const isSell = t.type === 'SELL';
+        const isExchangeOut = t.type === 'SHARE_EXCHANGE_OUT';
+        const isSplit = t.type === 'SPLIT';
+        const isRoc = t.type === 'RETURN_OF_CAPITAL';
+
+        if (isBuy) {
+            totalSharesMap[t.ticker] += t.quantity;
+            cb.runningCost += t.price * t.quantity;
+            cb.runningShares += t.quantity;
+        } else if (isRec) {
+            if (t.type === 'MRGS_MERGER') {
+                const mKey = `${t.ticker}::${t.date}`;
+                if (!(mKey in preMergerQtyMap)) preMergerQtyMap[mKey] = totalSharesMap[t.ticker];
+                const preMerger = preMergerQtyMap[mKey];
+                if (preMerger > 0 && Math.abs(t.quantity - preMerger) / preMerger < 0.01) {
+                    totalSharesMap[t.ticker] -= t.quantity;
+                    if (cb.runningShares > 0) {
+                        const avg = cb.runningCost / cb.runningShares;
+                        cb.runningCost -= avg * Math.min(t.quantity, cb.runningShares);
+                        cb.runningShares = Math.max(0, cb.runningShares - t.quantity);
+                    }
+                    continue;
+                }
+                if (spinoffSigs.has(`${t.ticker}::${t.date}::${t.quantity.toFixed(4)}`)) continue;
+                const prevReceived = mrgsNetReceived[t.ticker] ?? 0;
+                if (totalSharesMap[t.ticker] < 0.001 && prevReceived > 0 && Math.abs(t.quantity - prevReceived) / prevReceived < 0.01) continue;
+                mrgsNetReceived[t.ticker] = (mrgsNetReceived[t.ticker] ?? 0) + t.quantity;
+            }
+            const effectivePrice = (t.type === 'SHARE_EXCHANGE' && t.price === 0)
+                ? (exchangePriceLookup[`${t.ticker}|${t.date}`] ?? 0)
+                : t.price;
+            totalSharesMap[t.ticker] += t.quantity;
+            cb.runningCost += effectivePrice * t.quantity;
+            cb.runningShares += t.quantity;
+        } else if (isSell) {
+            totalSharesMap[t.ticker] -= t.quantity;
+            if (cb.runningShares > 0) {
+                const avgPerShare = cb.runningCost / cb.runningShares;
+                const soldQty = Math.min(t.quantity, cb.runningShares);
+                const pnl = (t.price - avgPerShare) * soldQty;
+                const month = t.date.substring(0, 7);
+                monthlyBuckets[month] = +((monthlyBuckets[month] ?? 0) + pnl).toFixed(2);
+                cb.runningCost -= avgPerShare * soldQty;
+                cb.runningShares = Math.max(0, cb.runningShares - t.quantity);
+            }
+        } else if (isSplit) {
+            totalSharesMap[t.ticker] *= t.quantity;
+            cb.runningShares *= t.quantity;
+        } else if (isExchangeOut) {
+            totalSharesMap[t.ticker] -= t.quantity;
+            if (cb.runningShares > 0) {
+                const avgPerShare = cb.runningCost / cb.runningShares;
+                const removedQty = Math.min(t.quantity, cb.runningShares);
+                cb.runningCost -= avgPerShare * removedQty;
+                cb.runningShares = Math.max(0, cb.runningShares - t.quantity);
+            }
+        } else if (isRoc) {
+            const amount = t.price * t.quantity;
+            cb.runningCost = Math.max(0, cb.runningCost - amount);
+        }
+    }
+
+    const firstMonth = sorted[0].date.substring(0, 7);
+    const todayStr = chartEndMonth();
+    const months: string[] = [];
+    {
+        let cur = firstMonth;
+        while (cur <= todayStr) {
+            months.push(cur);
+            const [y, m] = cur.split('-').map(Number);
+            cur = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+        }
+    }
+    return months.map(month => ({ month, realizedPnL: +(monthlyBuckets[month] ?? 0).toFixed(2) }));
+}
+
+app.get('/api/portfolio/monthly-realized-pnl', (_req: Request, res: Response) => {
+    let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
+    try {
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+    } catch {
+        return res.status(500).send('Error reading transactions file');
+    }
+    res.json(computeMonthlyRealizedPnL(transactions));
+});
+
 // GET monthly portfolio value history (for charting)
 app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => {
     if (fs.existsSync(HISTORY_CACHE_FILE)) {
@@ -1053,26 +1224,50 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
         }
     }
 
+    // Yahoo permanently expresses historical prices in "as compared to today" terms — a stock
+    // split adjusts every price before it, not just the ones after. (Confirmed directly: GOOG's
+    // `close` for 2021-01-08, well before its 2022 20-for-1 split, comes back as ~$90, not the
+    // ~$1788 it actually traded at that day — `close` is split-adjusted same as `adjclose`, they
+    // only differ on dividends.) Our share tracking below is deliberately the opposite: raw,
+    // as-of-date counts, so a SPLIT transaction only multiplies the running total once processing
+    // reaches its actual date — correct for "how many shares did I hold on this date," but it
+    // means raw historical share counts don't line up with Yahoo's always-modern-equivalent prices.
+    // To value a position we need shares in that SAME modern-equivalent convention, so for every
+    // ticker we precompute the total split factor across its whole history, then track how much of
+    // that factor is still "ahead" of the date we're currently processing, and apply that remaining
+    // factor when snapshotting shares for valuation (not to runningShares itself, which stays raw).
+    const totalSplitFactor: Record<string, number> = {};
+    for (const t of sorted) {
+        if (t.type === 'SPLIT') totalSplitFactor[t.ticker] = (totalSplitFactor[t.ticker] ?? 1) * t.quantity;
+    }
+
     // Running state per ticker
     const runningShares: Record<string, number> = {};
     const runningCost: Record<string, number> = {};
+    const splitsRemainingFactor: Record<string, number> = {}; // how much future-split adjustment still applies
     // snapshot at end of each month
-    const monthlyShares: Record<string, Record<string, number>> = {}; // month -> ticker -> shares
+    const monthlyShares: Record<string, Record<string, number>> = {}; // month -> ticker -> valuation-equivalent shares
     let txIdx = 0;
 
     for (const month of months) {
         while (txIdx < sorted.length && sorted[txIdx].date.substring(0, 7) <= month) {
             const t = sorted[txIdx++];
-            if (!runningShares[t.ticker]) { runningShares[t.ticker] = 0; runningCost[t.ticker] = 0; }
+            if (!runningShares[t.ticker]) {
+                runningShares[t.ticker] = 0;
+                runningCost[t.ticker] = 0;
+                splitsRemainingFactor[t.ticker] = totalSplitFactor[t.ticker] ?? 1;
+            }
             const isBuy = t.type === 'BUY' || t.type === 'purchase' || t.type === 'REC' || t.type === 'MRGS_MERGER' || t.type === 'SPINOFF' || t.type === 'SHARE_EXCHANGE';
             const isSell = t.type === 'SELL' || t.type === 'SHARE_EXCHANGE_OUT';
             const isSplit = t.type === 'SPLIT';
             if (isBuy) { runningShares[t.ticker] += t.quantity; runningCost[t.ticker] += t.price * t.quantity; }
             else if (isSell) { runningShares[t.ticker] = Math.max(0, runningShares[t.ticker] - t.quantity); }
-            else if (isSplit) { runningShares[t.ticker] *= t.quantity; }
+            else if (isSplit) { runningShares[t.ticker] *= t.quantity; splitsRemainingFactor[t.ticker] /= t.quantity; }
         }
         monthlyShares[month] = Object.fromEntries(
-            Object.entries(runningShares).filter(([, s]) => s > 0.0001).map(([t, s]) => [t, +s.toFixed(6)])
+            Object.entries(runningShares)
+                .filter(([, s]) => s > 0.0001)
+                .map(([tk, s]) => [tk, +(s * (splitsRemainingFactor[tk] ?? 1)).toFixed(6)])
         );
     }
 
@@ -1095,7 +1290,23 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
         cumDividends[month] = +runDividends.toFixed(2);
     }
 
-    // Fetch historical monthly prices for all tickers ever held
+    // Fetch historical prices for all tickers ever held, resampled to month-end ourselves from
+    // daily bars rather than trusting Yahoo's '1mo'-interval endpoint directly. That endpoint is
+    // occasionally just wrong for a specific ticker/date range — e.g. BYND reported ~30x its real
+    // price for several consecutive months around 2021 (confirmed against BYND's own daily bars,
+    // which were correct for the same dates). Resampling from daily bars ourselves sidesteps this
+    // class of bug entirely, since we're not trusting Yahoo's own monthly aggregation, and it
+    // avoids a false-positive trap an earlier attempt at a narrower patch fell into: comparing a
+    // month's price against the nearest actual trade price on record looked reasonable, but any
+    // ticker with a later stock split (e.g. AMZN's 20-for-1 split in 2022, MSTR's 10-for-1 split
+    // in 2024) legitimately shows old split-adjusted prices that differ from raw historical trade
+    // prices by exactly the split ratio, and tickers bought only once, years away from a given
+    // month, made ordinary multi-year appreciation look like a data bug too — both got
+    // miscorrected. Resampling from this same ticker's own daily series has no such mismatch:
+    // daily and monthly data from the same source share the same adjustment convention.
+    // This is a heavier fetch per ticker than the '1mo' endpoint, but this endpoint's result is
+    // already disk-cached (HISTORY_CACHE_FILE) and only recomputed when that cache is cleared, so
+    // the extra cost is paid once per cache invalidation, not on every page load.
     const allTickers = Object.keys(runningShares);
     const historicalPrices: Record<string, Record<string, number>> = {}; // ticker -> "YYYY-MM" -> price
     const period1 = new Date(`${firstMonth}-01`);
@@ -1104,12 +1315,25 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
         historicalPrices[ticker] = {};
         try {
             const hist = await withTimeout(
-                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1mo' }),
+                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1d' }),
                 15000
             );
+            // Quotes come back chronologically ascending, so keeping the price on every matching
+            // row and letting later rows overwrite earlier ones naturally lands on the last
+            // trading day of each calendar month once the loop finishes.
+            //
+            // Deliberately `close`, not `adjclose`: share counts here are tracked in raw,
+            // as-of-date units (a SPLIT transaction only multiplies runningShares once processing
+            // reaches its actual date), so pairing them with adjclose — which Yahoo retroactively
+            // divides by every *later* split, even for dates before that split happened — silently
+            // erases most of a position's value for any ticker held through a subsequent split
+            // (e.g. GOOG's 20-for-1 split in 2022 made pre-split holdings look ~95% smaller than
+            // they were). `close` matches the nominal price at the time, which is what raw
+            // as-of-date shares actually need. This also sidesteps adjclose's dividend adjustment,
+            // which would otherwise double-count dividends this app already tracks separately.
             for (const row of hist.quotes) {
                 const m = row.date.toISOString().substring(0, 7);
-                const price = row.adjclose ?? row.close;
+                const price = row.close;
                 if (typeof price === 'number' && price > 0) historicalPrices[ticker][m] = price;
             }
         } catch { /* no history available — will fall back to last known */ }
@@ -1137,6 +1361,171 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
     res.json(result);
 });
 
+// Shared engine behind both /api/portfolio/period-returns and the "Portfolio Ann%" line in
+// /api/portfolio/benchmark: a true daily time-weighted return series built from the exact
+// transaction dates on record. An earlier monthly-bucketed version of this had to *guess* when
+// during each month a contribution landed (start? middle? end?) to net its effect out of that
+// month's return — and for an active, volatile portfolio like this one, that guess swung the
+// all-time return from -64% to +499% to +6738% depending purely on the guess, none of them
+// trustworthy. At daily granularity there's no guess: a contribution on a given day either was or
+// wasn't part of that day's return, so the cash-flow timing ambiguity disappears.
+async function computeDailyReturns(
+    transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>
+): Promise<{ dailyReturns: Array<{ date: string; r: number }>; firstDate: string } | null> {
+    if (transactions.length === 0) return null;
+
+    const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+    const firstDate = sorted[0].date;
+    const todayStr = new Date().toISOString().substring(0, 10);
+
+    // Full calendar-day range from the first transaction to today. Non-trading days just carry
+    // forward the last known price per ticker, same as the monthly endpoint does per month.
+    const days: string[] = [];
+    {
+        const cur = new Date(`${firstDate}T00:00:00Z`);
+        const end = new Date(`${todayStr}T00:00:00Z`);
+        while (cur <= end) {
+            days.push(cur.toISOString().substring(0, 10));
+            cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+    }
+
+    // Yahoo permanently expresses historical prices in "as compared to today" terms (confirmed:
+    // GOOG's `close` for 2021-01-08, before its 2022 20-for-1 split, is ~$90, not the ~$1788 it
+    // actually traded at — `close` is split-adjusted same as `adjclose`). Raw as-of-date share
+    // counts don't line up with that, so — same fix as monthly-value — precompute each ticker's
+    // total split factor and apply however much of it is still "ahead" of the date being valued.
+    const totalSplitFactor: Record<string, number> = {};
+    for (const t of sorted) {
+        if (t.type === 'SPLIT') totalSplitFactor[t.ticker] = (totalSplitFactor[t.ticker] ?? 1) * t.quantity;
+    }
+
+    // Running shares and cumulative net-invested per day (same BUY/SELL/SPLIT rules as monthly-value)
+    const runningShares: Record<string, number> = {};
+    const splitsRemainingFactor: Record<string, number> = {};
+    const dailyShares: Record<string, Record<string, number>> = {};
+    const cumInvestedDaily: Record<string, number> = {};
+    let runInvested = 0;
+    let txIdx = 0;
+    for (const day of days) {
+        while (txIdx < sorted.length && sorted[txIdx].date <= day) {
+            const t = sorted[txIdx++];
+            if (!runningShares[t.ticker]) {
+                runningShares[t.ticker] = 0;
+                splitsRemainingFactor[t.ticker] = totalSplitFactor[t.ticker] ?? 1;
+            }
+            const isBuy = t.type === 'BUY' || t.type === 'purchase' || t.type === 'REC' || t.type === 'MRGS_MERGER' || t.type === 'SPINOFF' || t.type === 'SHARE_EXCHANGE';
+            const isSell = t.type === 'SELL' || t.type === 'SHARE_EXCHANGE_OUT';
+            const isSplit = t.type === 'SPLIT';
+            if (isBuy) { runningShares[t.ticker] += t.quantity; runInvested += t.price * t.quantity; }
+            else if (isSell) {
+                runningShares[t.ticker] = Math.max(0, runningShares[t.ticker] - t.quantity);
+                if (t.type === 'SELL') runInvested -= t.price * t.quantity;
+            } else if (isSplit) { runningShares[t.ticker] *= t.quantity; splitsRemainingFactor[t.ticker] /= t.quantity; }
+        }
+        dailyShares[day] = Object.fromEntries(
+            Object.entries(runningShares)
+                .filter(([, s]) => s > 0.0001)
+                .map(([tk, s]) => [tk, s * (splitsRemainingFactor[tk] ?? 1)])
+        );
+        cumInvestedDaily[day] = +runInvested.toFixed(2);
+    }
+
+    // Daily prices per ticker, resampled from Yahoo's daily bars the same way monthly-value does
+    // (carry the last trading day's close forward across weekends/holidays).
+    const allTickers = Object.keys(runningShares);
+    const dailyPrices: Record<string, Record<string, number>> = {};
+    const period1 = new Date(firstDate);
+    const period2 = new Date();
+    for (const ticker of allTickers) {
+        dailyPrices[ticker] = {};
+        try {
+            const hist = await withTimeout(
+                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1d' }),
+                15000
+            );
+            // `close`, not `adjclose` — see the identical comment in /api/portfolio/monthly-value:
+            // shares here are raw as-of-date counts, and adjclose is retroactively split-adjusted,
+            // so pairing the two erases most of a position's pre-split value.
+            for (const row of hist.quotes) {
+                const d = row.date.toISOString().substring(0, 10);
+                const price = row.close;
+                if (typeof price === 'number' && price > 0) dailyPrices[ticker][d] = price;
+            }
+        } catch { /* no history available — will fall back to last known */ }
+    }
+
+    const dailyTotalValue: Record<string, number> = {};
+    const lastKnownPrice: Record<string, number> = {};
+    for (const day of days) {
+        let totalValue = 0;
+        for (const [ticker, qty] of Object.entries(dailyShares[day] ?? {})) {
+            const price = dailyPrices[ticker]?.[day] ?? lastKnownPrice[ticker] ?? 0;
+            if (dailyPrices[ticker]?.[day]) lastKnownPrice[ticker] = dailyPrices[ticker][day];
+            totalValue += qty * price;
+        }
+        dailyTotalValue[day] = +totalValue.toFixed(2);
+    }
+
+    // Chain daily Modified-Dietz returns into a time-weighted return series.
+    const dailyReturns: Array<{ date: string; r: number }> = [];
+    let prevValue = 0, prevInvested = 0;
+    for (const day of days) {
+        const currValue = dailyTotalValue[day];
+        const currInvested = cumInvestedDaily[day];
+        const contribution = currInvested - prevInvested;
+        const denom = prevValue + contribution;
+        const r = denom > 0 ? (currValue - denom) / denom : 0;
+        dailyReturns.push({ date: day, r });
+        prevValue = currValue;
+        prevInvested = currInvested;
+    }
+
+    return { dailyReturns, firstDate };
+}
+
+app.get('/api/portfolio/period-returns', async (_req: Request, res: Response) => {
+    if (fs.existsSync(PERIOD_RETURNS_CACHE_FILE)) {
+        try {
+            return res.json(JSON.parse(fs.readFileSync(PERIOD_RETURNS_CACHE_FILE, 'utf8')));
+        } catch { /* fall through */ }
+    }
+
+    let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
+    try {
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+    } catch {
+        return res.status(500).send('Error reading transactions file');
+    }
+    const computed = await computeDailyReturns(transactions);
+    if (!computed) return res.json({});
+    const { dailyReturns } = computed;
+
+    function windowStartDate(period: string): string | null {
+        const now = new Date();
+        switch (period) {
+            case '3m': { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d.toISOString().substring(0, 10); }
+            case '6m': { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d.toISOString().substring(0, 10); }
+            case 'ytd': return `${now.getFullYear()}-01-01`;
+            case '1y': { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d.toISOString().substring(0, 10); }
+            case '2y': { const d = new Date(now); d.setFullYear(d.getFullYear() - 2); return d.toISOString().substring(0, 10); }
+            case '5y': { const d = new Date(now); d.setFullYear(d.getFullYear() - 5); return d.toISOString().substring(0, 10); }
+            default: return null; // 'all'
+        }
+    }
+
+    const result: Record<string, number> = {};
+    for (const period of ['3m', '6m', 'ytd', '1y', '2y', '5y', 'all']) {
+        const start = windowStartDate(period);
+        const windowReturns = start ? dailyReturns.filter((d) => d.date >= start) : dailyReturns;
+        const twr = windowReturns.reduce((acc, d) => acc * (1 + d.r), 1);
+        result[period] = +((twr - 1) * 100).toFixed(2);
+    }
+
+    try { fs.writeFileSync(PERIOD_RETURNS_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore */ }
+    res.json(result);
+});
+
 // GET monthly portfolio Ann% vs SPY Ann% vs Nasdaq (QQQ) Ann% for benchmark comparison chart
 app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
     if (fs.existsSync(BENCHMARK_CACHE_FILE)) {
@@ -1158,6 +1547,28 @@ app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
     const startMonth = startEntry.month;
     const [sy, sm] = startMonth.split('-').map(Number);
     const startMonthNum = sy * 12 + sm;
+
+    // Portfolio Ann% below uses the same true daily time-weighted return engine as
+    // /api/portfolio/period-returns, not a money-weighted lump-sum ROI annualization. The
+    // money-weighted version used to live here, and it looked plausible (~18%/yr) but wasn't
+    // actually comparable to SPY/Nasdaq's clean lump-sum annualized returns: it gets inflated by
+    // trading activity — selling winners shrinks the "total invested" denominator it divides by,
+    // even when the proceeds stay fully invested elsewhere — so the "+X% ahead of SPY" badge was
+    // measuring two different kinds of things side by side. TWR treats every dollar-day the same
+    // regardless of where the cash came from, so it's the fair comparison against a lump-sum hold.
+    const cumulativeTwrByMonth: Record<string, number> = {};
+    try {
+        const transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }> =
+            JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+        const computed = await computeDailyReturns(transactions);
+        if (computed) {
+            let cum = 1;
+            for (const { date, r } of computed.dailyReturns) {
+                cum *= (1 + r);
+                cumulativeTwrByMonth[date.substring(0, 7)] = cum; // overwritten daily -> ends up as month's last day
+            }
+        }
+    } catch { /* leave cumulativeTwrByMonth empty; rows without a match are skipped below */ }
 
     // Fetch SPY and QQQ adjusted monthly closes from portfolio start to today
     const spyPrices: Record<string, number> = {};
@@ -1197,11 +1608,11 @@ app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
         if (monthsElapsed < 12 || row.totalInvested <= 0) continue;
         const years = monthsElapsed / 12;
 
-        // Portfolio Ann%: uses net invested (history already deducts sell proceeds from totalInvested)
-        const totalReturn = row.totalValue + row.totalDividends - row.totalInvested;
-        const factor = 1 + totalReturn / row.totalInvested;
-        if (factor <= 0) continue;
-        const portfolioAnn = (Math.pow(factor, 1 / years) - 1) * 100;
+        // Portfolio Ann%: true time-weighted return through this month, annualized — see the
+        // cumulativeTwrByMonth comment above for why this replaced a money-weighted calculation.
+        const cumTwr = cumulativeTwrByMonth[row.month];
+        if (!cumTwr || cumTwr <= 0) continue;
+        const portfolioAnn = (Math.pow(cumTwr, 1 / years) - 1) * 100;
 
         // SPY Ann%: lump-sum from portfolio start date to this month
         const spyPrice = spyPrices[row.month];

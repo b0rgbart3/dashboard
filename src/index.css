@@ -134,6 +134,8 @@
   /* #00a8c8 */
   --chart-8: var(--data-supreme);
   /* #6f46d4 */
+  --chart-other: #0c5c34;
+  /* dark green — reserved for the pie chart's "Other" slice so it never matches a ticker's dark blue */
 
   /* — Chart overlays (used across multiple chart components) — */
   --chart-cursor: rgba(255, 255, 255, 0.05);
