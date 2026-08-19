@@ -1,0 +1,15 @@
+{
+  "AMD": {
+    "monthlyStack": "200",
+    "decayMonths": "20",
+    "stockPrice": "100",
+    "dividendInput": "11.5",
+    "taperDate": "2028-05",
+    "taperLength": "12",
+    "targetIncome": "2400",
+    "projectionLength": "60",
+    "useTaper": true,
+    "stackMode": "average",
+    "rampUpMonths": "0"
+  }
+}

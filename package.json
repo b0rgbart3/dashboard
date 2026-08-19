@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "server": "tsx server.ts",
     "server:dev": "tsx watch server.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "generate:mock": "tsx scripts/generateMockData.ts"
   },
   "dependencies": {
     "body-parser": "^2.2.2",

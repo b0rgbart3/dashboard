@@ -13,51 +13,76 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 5001;
-const TRANSACTIONS_FILE = path.join(__dirname, 'data', 'transactions.json');
-const STOCKS_FILE = path.join(__dirname, 'data', 'stocks.json');
-const PROJECTION_SETTINGS_FILE = path.join(__dirname, 'data', 'projection-settings.json');
-const SUMMARY_CACHE_FILE = path.join(__dirname, 'data', 'summary-cache.json');
-const HISTORY_CACHE_FILE = path.join(__dirname, 'data', 'portfolio-history-cache.json');
-const BENCHMARK_CACHE_FILE = path.join(__dirname, 'data', 'benchmark-cache.json');
-const PERIOD_RETURNS_CACHE_FILE = path.join(__dirname, 'data', 'period-returns-cache.json');
+
+// Global data-mode switch: 'mock' points every file-backed route at data/mock/ (a committed,
+// fabricated fixture) instead of data/ (gitignored, real personal data) — lets the same server
+// power a public demo deploy without ever touching real financial data.
+let currentMode: 'real' | 'mock' = process.env.DATA_MODE === 'mock' ? 'mock' : 'real';
+
+function dataDir(): string {
+    return currentMode === 'mock'
+        ? path.join(__dirname, 'data', 'mock')
+        : path.join(__dirname, 'data');
+}
+
+function TRANSACTIONS_FILE(): string { return path.join(dataDir(), 'transactions.json'); }
+function STOCKS_FILE(): string { return path.join(dataDir(), 'stocks.json'); }
+function PROJECTION_SETTINGS_FILE(): string { return path.join(dataDir(), 'projection-settings.json'); }
+function SUMMARY_CACHE_FILE(): string { return path.join(dataDir(), 'summary-cache.json'); }
+function HISTORY_CACHE_FILE(): string { return path.join(dataDir(), 'portfolio-history-cache.json'); }
+function BENCHMARK_CACHE_FILE(): string { return path.join(dataDir(), 'benchmark-cache.json'); }
+function PERIOD_RETURNS_CACHE_FILE(): string { return path.join(dataDir(), 'period-returns-cache.json'); }
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 
-// Ensure the data directory exists
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir);
+// Ensure the active mode's data directory exists
+if (!fs.existsSync(dataDir())) {
+    fs.mkdirSync(dataDir(), { recursive: true });
 }
 
 // Ensure the transactions file exists
-if (!fs.existsSync(TRANSACTIONS_FILE)) {
-    fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify([]));
+if (!fs.existsSync(TRANSACTIONS_FILE())) {
+    fs.writeFileSync(TRANSACTIONS_FILE(), JSON.stringify([]));
 }
 
 // Seed stocks.json if it doesn't exist
-if (!fs.existsSync(STOCKS_FILE)) {
-    fs.writeFileSync(STOCKS_FILE, JSON.stringify([
+if (!fs.existsSync(STOCKS_FILE())) {
+    fs.writeFileSync(STOCKS_FILE(), JSON.stringify([
         { id: 'STRC', ticker: 'STRC', name: 'Strategy Inc', createdAt: new Date().toISOString().split('T')[0] }
     ], null, 2));
 }
 
 // Seed projection-settings.json if it doesn't exist
-if (!fs.existsSync(PROJECTION_SETTINGS_FILE)) {
-    fs.writeFileSync(PROJECTION_SETTINGS_FILE, JSON.stringify({}));
+if (!fs.existsSync(PROJECTION_SETTINGS_FILE())) {
+    fs.writeFileSync(PROJECTION_SETTINGS_FILE(), JSON.stringify({}));
 }
 
 function invalidateSummaryCache() {
-    if (fs.existsSync(SUMMARY_CACHE_FILE)) fs.unlinkSync(SUMMARY_CACHE_FILE);
-    if (fs.existsSync(HISTORY_CACHE_FILE)) fs.unlinkSync(HISTORY_CACHE_FILE);
-    if (fs.existsSync(BENCHMARK_CACHE_FILE)) fs.unlinkSync(BENCHMARK_CACHE_FILE);
-    if (fs.existsSync(PERIOD_RETURNS_CACHE_FILE)) fs.unlinkSync(PERIOD_RETURNS_CACHE_FILE);
+    if (fs.existsSync(SUMMARY_CACHE_FILE())) fs.unlinkSync(SUMMARY_CACHE_FILE());
+    if (fs.existsSync(HISTORY_CACHE_FILE())) fs.unlinkSync(HISTORY_CACHE_FILE());
+    if (fs.existsSync(BENCHMARK_CACHE_FILE())) fs.unlinkSync(BENCHMARK_CACHE_FILE());
+    if (fs.existsSync(PERIOD_RETURNS_CACHE_FILE())) fs.unlinkSync(PERIOD_RETURNS_CACHE_FILE());
 }
+
+// GET/SET the active data mode ('real' | 'mock')
+app.get('/api/data-mode', (_req: Request, res: Response) => {
+    res.json({ mode: currentMode });
+});
+
+app.post('/api/data-mode', (req: Request, res: Response) => {
+    const { mode } = req.body;
+    if (mode !== 'real' && mode !== 'mock') {
+        return res.status(400).json({ error: 'mode must be "real" or "mock"' });
+    }
+    currentMode = mode;
+    res.json({ mode: currentMode });
+});
 
 // GET transactions (optional ?ticker= filter)
 app.get('/api/transactions', (req: Request, res: Response) => {
     const ticker = req.query.ticker as string | undefined;
-    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+    fs.readFile(TRANSACTIONS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading transactions file');
         let transactions = JSON.parse(data);
         if (ticker) {
@@ -70,11 +95,11 @@ app.get('/api/transactions', (req: Request, res: Response) => {
 // POST transaction
 app.post('/api/transactions', (req: Request, res: Response) => {
     const newTransaction = req.body;
-    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+    fs.readFile(TRANSACTIONS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading transactions file');
         const transactions = JSON.parse(data);
         transactions.push(newTransaction);
-        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), (writeErr) => {
+        fs.writeFile(TRANSACTIONS_FILE(), JSON.stringify(transactions, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing transactions file');
             invalidateSummaryCache();
             res.status(201).json(newTransaction);
@@ -88,7 +113,7 @@ app.post('/api/transactions/bulk', (req: Request, res: Response) => {
     if (!Array.isArray(newTransactions)) {
         return res.status(400).json({ error: 'Expected an array' });
     }
-    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+    fs.readFile(TRANSACTIONS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading transactions file');
         const transactions = JSON.parse(data);
 
@@ -142,7 +167,7 @@ app.post('/api/transactions/bulk', (req: Request, res: Response) => {
         }
 
         const updated = [...(transactions as TxnLike[]).filter(t => !toDelete.has(t.id)), ...inserted];
-        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
+        fs.writeFile(TRANSACTIONS_FILE(), JSON.stringify(updated, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing transactions file');
             invalidateSummaryCache();
             res.status(201).json({ inserted, skipped });
@@ -153,7 +178,7 @@ app.post('/api/transactions/bulk', (req: Request, res: Response) => {
 // DELETE transaction by id
 app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     const id = req.params.id;
-    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+    fs.readFile(TRANSACTIONS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading transactions file');
         let transactions: Array<{ id: string | number }> = JSON.parse(data);
         const originalLength = transactions.length;
@@ -161,7 +186,7 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
         if (transactions.length === originalLength) {
             return res.status(404).json({ error: 'Transaction not found', id });
         }
-        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(transactions, null, 2), (writeErr) => {
+        fs.writeFile(TRANSACTIONS_FILE(), JSON.stringify(transactions, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing transactions file');
             invalidateSummaryCache();
             res.status(200).json({ message: 'Transaction deleted', id });
@@ -172,11 +197,11 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
 // DELETE all transactions for a ticker
 app.delete('/api/transactions', (req: Request, res: Response) => {
     const ticker = req.query.ticker as string | undefined;
-    fs.readFile(TRANSACTIONS_FILE, 'utf8', (err, data) => {
+    fs.readFile(TRANSACTIONS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading transactions file');
         let transactions: Array<{ ticker?: string }> = JSON.parse(data);
         const remaining = ticker ? transactions.filter(t => t.ticker !== ticker) : [];
-        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(remaining, null, 2), (writeErr) => {
+        fs.writeFile(TRANSACTIONS_FILE(), JSON.stringify(remaining, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing transactions file');
             invalidateSummaryCache();
             res.status(200).json({ message: 'Transactions deleted', ticker });
@@ -186,7 +211,7 @@ app.delete('/api/transactions', (req: Request, res: Response) => {
 
 // GET stocks
 app.get('/api/stocks', (_req: Request, res: Response) => {
-    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+    fs.readFile(STOCKS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading stocks file');
         res.json(JSON.parse(data));
     });
@@ -195,14 +220,14 @@ app.get('/api/stocks', (_req: Request, res: Response) => {
 // POST stock (add new stock)
 app.post('/api/stocks', (req: Request, res: Response) => {
     const newStock = req.body;
-    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+    fs.readFile(STOCKS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading stocks file');
         const stocks: Array<{ ticker: string }> = JSON.parse(data);
         if (stocks.some(s => s.ticker === newStock.ticker)) {
             return res.status(409).json({ error: 'Stock already exists' });
         }
         stocks.push(newStock);
-        fs.writeFile(STOCKS_FILE, JSON.stringify(stocks, null, 2), (writeErr) => {
+        fs.writeFile(STOCKS_FILE(), JSON.stringify(stocks, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing stocks file');
             res.status(201).json(newStock);
         });
@@ -213,14 +238,14 @@ app.post('/api/stocks', (req: Request, res: Response) => {
 app.post('/api/stocks/bulk', (req: Request, res: Response) => {
     const newStocks: Array<{ ticker: string }> = req.body;
     if (!Array.isArray(newStocks)) return res.status(400).json({ error: 'Expected an array' });
-    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+    fs.readFile(STOCKS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading stocks file');
         const stocks: Array<{ ticker: string }> = JSON.parse(data);
         const existingTickers = new Set(stocks.map(s => s.ticker));
         const toAdd = newStocks.filter(s => !existingTickers.has(s.ticker));
         if (toAdd.length === 0) return res.status(200).json([]);
         const updated = [...stocks, ...toAdd];
-        fs.writeFile(STOCKS_FILE, JSON.stringify(updated, null, 2), (writeErr) => {
+        fs.writeFile(STOCKS_FILE(), JSON.stringify(updated, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing stocks file');
             res.status(201).json(toAdd);
         });
@@ -230,7 +255,7 @@ app.post('/api/stocks/bulk', (req: Request, res: Response) => {
 // DELETE stock (also removes all transactions for that ticker)
 app.delete('/api/stocks/:ticker', (req: Request, res: Response) => {
     const ticker = req.params.ticker;
-    fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+    fs.readFile(STOCKS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading stocks file');
         let stocks: Array<{ ticker: string }> = JSON.parse(data);
         const originalLength = stocks.length;
@@ -238,13 +263,13 @@ app.delete('/api/stocks/:ticker', (req: Request, res: Response) => {
         if (stocks.length === originalLength) {
             return res.status(404).json({ error: 'Stock not found' });
         }
-        fs.writeFile(STOCKS_FILE, JSON.stringify(stocks, null, 2), (writeErr) => {
+        fs.writeFile(STOCKS_FILE(), JSON.stringify(stocks, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing stocks file');
             // Cascade: remove all transactions for this ticker
-            fs.readFile(TRANSACTIONS_FILE, 'utf8', (tErr, tData) => {
+            fs.readFile(TRANSACTIONS_FILE(), 'utf8', (tErr, tData) => {
                 if (!tErr) {
                     const remaining = (JSON.parse(tData) as Array<{ ticker?: string }>).filter(t => t.ticker !== ticker);
-                    fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(remaining, null, 2), () => {});
+                    fs.writeFile(TRANSACTIONS_FILE(), JSON.stringify(remaining, null, 2), () => {});
                 }
             });
             invalidateSummaryCache();
@@ -255,9 +280,9 @@ app.delete('/api/stocks/:ticker', (req: Request, res: Response) => {
 
 // DELETE all data (stocks + transactions)
 app.delete('/api/all', (_req: Request, res: Response) => {
-    fs.writeFile(STOCKS_FILE, JSON.stringify([], null, 2), (sErr) => {
+    fs.writeFile(STOCKS_FILE(), JSON.stringify([], null, 2), (sErr) => {
         if (sErr) return res.status(500).send('Error clearing stocks file');
-        fs.writeFile(TRANSACTIONS_FILE, JSON.stringify([], null, 2), (tErr) => {
+        fs.writeFile(TRANSACTIONS_FILE(), JSON.stringify([], null, 2), (tErr) => {
             if (tErr) return res.status(500).send('Error clearing transactions file');
             invalidateSummaryCache();
             res.status(200).json({ message: 'All data deleted' });
@@ -268,7 +293,7 @@ app.delete('/api/all', (_req: Request, res: Response) => {
 // GET projection settings for a ticker
 app.get('/api/projection-settings/:ticker', (req: Request, res: Response) => {
     const ticker = req.params.ticker;
-    fs.readFile(PROJECTION_SETTINGS_FILE, 'utf8', (err, data) => {
+    fs.readFile(PROJECTION_SETTINGS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading projection settings file');
         const all = JSON.parse(data);
         res.json(all[ticker] ?? {});
@@ -279,11 +304,11 @@ app.get('/api/projection-settings/:ticker', (req: Request, res: Response) => {
 app.put('/api/projection-settings/:ticker', (req: Request, res: Response) => {
     const ticker = req.params.ticker;
     const settings = req.body;
-    fs.readFile(PROJECTION_SETTINGS_FILE, 'utf8', (err, data) => {
+    fs.readFile(PROJECTION_SETTINGS_FILE(), 'utf8', (err, data) => {
         if (err) return res.status(500).send('Error reading projection settings file');
         const all = JSON.parse(data);
         all[ticker] = settings;
-        fs.writeFile(PROJECTION_SETTINGS_FILE, JSON.stringify(all, null, 2), (writeErr) => {
+        fs.writeFile(PROJECTION_SETTINGS_FILE(), JSON.stringify(all, null, 2), (writeErr) => {
             if (writeErr) return res.status(500).send('Error writing projection settings file');
             res.status(200).json(settings);
         });
@@ -368,7 +393,7 @@ app.patch('/api/stocks/:ticker', (req: Request, res: Response) => {
     const ticker = req.params.ticker;
     const { name, shortName, description } = req.body as { name?: string; shortName?: string; description?: string };
     stocksWriteQueue = stocksWriteQueue.then(() => new Promise<void>((resolve) => {
-        fs.readFile(STOCKS_FILE, 'utf8', (err, data) => {
+        fs.readFile(STOCKS_FILE(), 'utf8', (err, data) => {
             if (err) { res.status(500).send('Error reading stocks file'); resolve(); return; }
             const stocks: Array<{ ticker: string; name: string; shortName?: string; description?: string; createdAt?: string }> = JSON.parse(data);
             let stock = stocks.find(s => s.ticker === ticker);
@@ -380,7 +405,7 @@ app.patch('/api/stocks/:ticker', (req: Request, res: Response) => {
             if (name !== undefined) stock.name = name;
             if (shortName !== undefined) stock.shortName = shortName;
             if (description !== undefined) stock.description = description;
-            fs.writeFile(STOCKS_FILE, JSON.stringify(stocks, null, 2), (writeErr) => {
+            fs.writeFile(STOCKS_FILE(), JSON.stringify(stocks, null, 2), (writeErr) => {
                 if (writeErr) { res.status(500).send('Error writing stocks file'); resolve(); return; }
                 res.status(200).json(stock);
                 resolve();
@@ -459,7 +484,7 @@ app.get('/api/price/:ticker', async (req: Request, res: Response) => {
     const dbFallbackPrice = (): number | null => {
         try {
             const txns: Array<{ ticker: string; type: string; price: number; date: string }> =
-                JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+                JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
             const recent = txns
                 .filter(t => t.ticker === ticker && (t.type === 'BUY' || t.type === 'SELL' || t.type === 'purchase'))
                 .sort((a, b) => b.date.localeCompare(a.date));
@@ -491,18 +516,18 @@ app.post('/api/stocks/summary/refresh', (_req: Request, res: Response) => {
 });
 
 app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
-    if (fs.existsSync(SUMMARY_CACHE_FILE)) {
+    if (fs.existsSync(SUMMARY_CACHE_FILE())) {
         try {
-            const ageMs = Date.now() - fs.statSync(SUMMARY_CACHE_FILE).mtimeMs;
+            const ageMs = Date.now() - fs.statSync(SUMMARY_CACHE_FILE()).mtimeMs;
             if (ageMs < 15 * 60 * 1000) {
-                const cached = JSON.parse(fs.readFileSync(SUMMARY_CACHE_FILE, 'utf8'));
+                const cached = JSON.parse(fs.readFileSync(SUMMARY_CACHE_FILE(), 'utf8'));
                 return res.json(cached);
             }
-            fs.unlinkSync(SUMMARY_CACHE_FILE);
+            fs.unlinkSync(SUMMARY_CACHE_FILE());
         } catch { /* fall through to recompute if cache is corrupt */ }
     }
 
-    fs.readFile(TRANSACTIONS_FILE, 'utf8', async (err, data) => {
+    fs.readFile(TRANSACTIONS_FILE(), 'utf8', async (err, data) => {
         if (err) return res.status(500).send('Error reading transactions file');
         let transactions: Array<{ ticker: string; type: string; price: number; quantity: number }>;
         try {
@@ -833,7 +858,7 @@ app.get('/api/stocks/summary', async (_req: Request, res: Response) => {
         }
 
         if (Object.keys(livePrices).length > 0) {
-            try { fs.writeFileSync(SUMMARY_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore write errors */ }
+            try { fs.writeFileSync(SUMMARY_CACHE_FILE(), JSON.stringify(result, null, 2)); } catch { /* ignore write errors */ }
         }
         res.json(result);
     });
@@ -893,7 +918,7 @@ function effectiveDividendMonth(
 app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
     let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
     try {
-        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
     } catch {
         return res.status(500).send('Error reading transactions file');
     }
@@ -971,7 +996,7 @@ app.get('/api/portfolio/monthly-dividends', (_req: Request, res: Response) => {
 app.get('/api/portfolio/monthly-dividends-by-ticker', (_req: Request, res: Response) => {
     let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
     try {
-        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
     } catch {
         return res.status(500).send('Error reading transactions file');
     }
@@ -1184,7 +1209,7 @@ function computeMonthlyRealizedPnL(
 app.get('/api/portfolio/monthly-realized-pnl', (_req: Request, res: Response) => {
     let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
     try {
-        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
     } catch {
         return res.status(500).send('Error reading transactions file');
     }
@@ -1193,16 +1218,16 @@ app.get('/api/portfolio/monthly-realized-pnl', (_req: Request, res: Response) =>
 
 // GET monthly portfolio value history (for charting)
 app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => {
-    if (fs.existsSync(HISTORY_CACHE_FILE)) {
+    if (fs.existsSync(HISTORY_CACHE_FILE())) {
         try {
-            const cached = JSON.parse(fs.readFileSync(HISTORY_CACHE_FILE, 'utf8'));
+            const cached = JSON.parse(fs.readFileSync(HISTORY_CACHE_FILE(), 'utf8'));
             return res.json(cached);
         } catch { /* fall through */ }
     }
 
     let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
     try {
-        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
     } catch {
         return res.status(500).send('Error reading transactions file');
     }
@@ -1305,7 +1330,7 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
     // miscorrected. Resampling from this same ticker's own daily series has no such mismatch:
     // daily and monthly data from the same source share the same adjustment convention.
     // This is a heavier fetch per ticker than the '1mo' endpoint, but this endpoint's result is
-    // already disk-cached (HISTORY_CACHE_FILE) and only recomputed when that cache is cleared, so
+    // already disk-cached (HISTORY_CACHE_FILE()) and only recomputed when that cache is cleared, so
     // the extra cost is paid once per cache invalidation, not on every page load.
     const allTickers = Object.keys(runningShares);
     const historicalPrices: Record<string, Record<string, number>> = {}; // ticker -> "YYYY-MM" -> price
@@ -1357,7 +1382,7 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
         result.push({ month, totalValue: +totalValue.toFixed(2), totalInvested: cumInvested[month] ?? 0, totalDividends: cumDividends[month] ?? 0 });
     }
 
-    try { fs.writeFileSync(HISTORY_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore */ }
+    try { fs.writeFileSync(HISTORY_CACHE_FILE(), JSON.stringify(result, null, 2)); } catch { /* ignore */ }
     res.json(result);
 });
 
@@ -1485,15 +1510,15 @@ async function computeDailyReturns(
 }
 
 app.get('/api/portfolio/period-returns', async (_req: Request, res: Response) => {
-    if (fs.existsSync(PERIOD_RETURNS_CACHE_FILE)) {
+    if (fs.existsSync(PERIOD_RETURNS_CACHE_FILE())) {
         try {
-            return res.json(JSON.parse(fs.readFileSync(PERIOD_RETURNS_CACHE_FILE, 'utf8')));
+            return res.json(JSON.parse(fs.readFileSync(PERIOD_RETURNS_CACHE_FILE(), 'utf8')));
         } catch { /* fall through */ }
     }
 
     let transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }>;
     try {
-        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+        transactions = JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
     } catch {
         return res.status(500).send('Error reading transactions file');
     }
@@ -1522,22 +1547,22 @@ app.get('/api/portfolio/period-returns', async (_req: Request, res: Response) =>
         result[period] = +((twr - 1) * 100).toFixed(2);
     }
 
-    try { fs.writeFileSync(PERIOD_RETURNS_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore */ }
+    try { fs.writeFileSync(PERIOD_RETURNS_CACHE_FILE(), JSON.stringify(result, null, 2)); } catch { /* ignore */ }
     res.json(result);
 });
 
 // GET monthly portfolio Ann% vs SPY Ann% vs Nasdaq (QQQ) Ann% for benchmark comparison chart
 app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
-    if (fs.existsSync(BENCHMARK_CACHE_FILE)) {
+    if (fs.existsSync(BENCHMARK_CACHE_FILE())) {
         try {
-            return res.json(JSON.parse(fs.readFileSync(BENCHMARK_CACHE_FILE, 'utf8')));
+            return res.json(JSON.parse(fs.readFileSync(BENCHMARK_CACHE_FILE(), 'utf8')));
         } catch { /* fall through and rebuild */ }
     }
 
-    if (!fs.existsSync(HISTORY_CACHE_FILE)) return res.json([]);
+    if (!fs.existsSync(HISTORY_CACHE_FILE())) return res.json([]);
     let history: Array<{ month: string; totalValue: number; totalInvested: number; totalDividends: number }>;
     try {
-        history = JSON.parse(fs.readFileSync(HISTORY_CACHE_FILE, 'utf8'));
+        history = JSON.parse(fs.readFileSync(HISTORY_CACHE_FILE(), 'utf8'));
     } catch { return res.json([]); }
     if (history.length < 2) return res.json([]);
 
@@ -1559,7 +1584,7 @@ app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
     const cumulativeTwrByMonth: Record<string, number> = {};
     try {
         const transactions: Array<{ ticker: string; type: string; price: number; quantity: number; date: string }> =
-            JSON.parse(fs.readFileSync(TRANSACTIONS_FILE, 'utf8'));
+            JSON.parse(fs.readFileSync(TRANSACTIONS_FILE(), 'utf8'));
         const computed = await computeDailyReturns(transactions);
         if (computed) {
             let cum = 1;
@@ -1633,7 +1658,7 @@ app.get('/api/portfolio/benchmark', async (_req: Request, res: Response) => {
         });
     }
 
-    try { fs.writeFileSync(BENCHMARK_CACHE_FILE, JSON.stringify(result, null, 2)); } catch { /* ignore */ }
+    try { fs.writeFileSync(BENCHMARK_CACHE_FILE(), JSON.stringify(result, null, 2)); } catch { /* ignore */ }
     res.json(result);
 });
 
