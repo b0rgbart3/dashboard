@@ -228,6 +228,27 @@ export const importStatusBox: CSSProperties = {
 
 export const spinningIcon: CSSProperties = { animation: "spin 1s linear infinite" };
 
+export const footer: CSSProperties = {
+  width: "100%", display: "flex", flexDirection: "column", alignItems: "center",
+  gap: "0.6rem", padding: "1.5rem 2rem 2rem", marginTop: "auto",
+  borderTop: "1px solid var(--border)",
+};
+
+export const footerLabel: CSSProperties = {
+  fontSize: "0.7rem", color: "var(--text-muted)",
+  textTransform: "uppercase", letterSpacing: "0.08em",
+};
+
+export const techStackRow: CSSProperties = {
+  display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0.5rem",
+};
+
+export const techStackChip: CSSProperties = {
+  fontSize: "0.75rem", color: "var(--text-muted)",
+  background: "var(--bg-card)", border: "1px solid var(--border)",
+  borderRadius: "999px", padding: "4px 12px",
+};
+
 // Always-green small row (ytd dividends per-month, ytd slip)
 export const ytdPerMonthRow: CSSProperties = {
   fontSize: "0.78rem", color: "var(--success)",

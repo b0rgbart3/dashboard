@@ -335,6 +335,31 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     ]);
 }
 
+// Historical valuation relies on every real-world split being logged as a SPLIT transaction (see
+// the splitsRemainingFactor comment in /api/portfolio/monthly-value) — Yahoo's `close` is always
+// expressed in today's-share-count terms, so a split missing from transactions.json silently
+// inflates or erases that ticker's historical value by the split ratio (BYND's unlogged 1-for-30
+// reverse split did exactly this, making 2021 portfolio value look ~30x too high). Rather than
+// guessing from price jumps — an earlier attempt at that produced false positives for tickers with
+// legitimate multi-year appreciation — this compares Yahoo's own authoritative corporate-actions
+// feed against what we've logged, so it only fires on a genuine, unambiguous gap.
+function checkForUnloggedSplit(
+    ticker: string,
+    splitEvents: Array<{ date: Date; numerator: number; denominator: number; splitRatio: string }> | undefined,
+    loggedFactor: number,
+): void {
+    if (!splitEvents || splitEvents.length === 0) return;
+    const realFactor = splitEvents.reduce((f, s) => f * (s.numerator / s.denominator), 1);
+    if (Math.abs(realFactor - loggedFactor) / realFactor > 0.02) {
+        console.warn(
+            `[split-check] ${ticker}: Yahoo reports ${splitEvents.map(s => s.splitRatio).join(', ')} ` +
+            `(combined factor ${realFactor.toFixed(4)}) but transactions.json only accounts for factor ` +
+            `${loggedFactor.toFixed(4)} — historical value for this ticker is likely off by ~${(realFactor / loggedFactor).toFixed(1)}x. ` +
+            `Add the missing SPLIT transaction(s).`
+        );
+    }
+}
+
 app.get('/api/lookup/batch', async (req: Request, res: Response) => {
     const tickersParam = (req.query.tickers as string) || '';
     const tickers = tickersParam.split(',').map(t => t.trim()).filter(Boolean);
@@ -1340,7 +1365,7 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
         historicalPrices[ticker] = {};
         try {
             const hist = await withTimeout(
-                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1d' }),
+                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1d', events: 'splits' }),
                 15000
             );
             // Quotes come back chronologically ascending, so keeping the price on every matching
@@ -1361,6 +1386,7 @@ app.get('/api/portfolio/monthly-value', async (_req: Request, res: Response) => 
                 const price = row.close;
                 if (typeof price === 'number' && price > 0) historicalPrices[ticker][m] = price;
             }
+            checkForUnloggedSplit(ticker, hist.events?.splits, totalSplitFactor[ticker] ?? 1);
         } catch { /* no history available — will fall back to last known */ }
     }
 
@@ -1466,7 +1492,7 @@ async function computeDailyReturns(
         dailyPrices[ticker] = {};
         try {
             const hist = await withTimeout(
-                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1d' }),
+                yahooFinance.chart(toYfTicker(ticker), { period1, period2, interval: '1d', events: 'splits' }),
                 15000
             );
             // `close`, not `adjclose` — see the identical comment in /api/portfolio/monthly-value:
@@ -1477,6 +1503,7 @@ async function computeDailyReturns(
                 const price = row.close;
                 if (typeof price === 'number' && price > 0) dailyPrices[ticker][d] = price;
             }
+            checkForUnloggedSplit(ticker, hist.events?.splits, totalSplitFactor[ticker] ?? 1);
         } catch { /* no history available — will fall back to last known */ }
     }
 

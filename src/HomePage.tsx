@@ -9,6 +9,16 @@ import PortfolioTable from "./components/PortfolioTable";
 import PortfolioCharts from "./components/PortfolioCharts";
 import * as styles from "./homePageStyles";
 
+const TECH_STACK = [
+  "React 19",
+  "TypeScript",
+  "Vite",
+  "Express 5",
+  "Recharts",
+  "Yahoo Finance",
+  "Lucide",
+];
+
 interface HomePageProps {
   onNavigateToDashboard: (ticker?: string) => void;
   message?: string | null;
@@ -480,6 +490,17 @@ const HomePage = ({
           <div style={styles.importStatusBox}>{importStatus}</div>
         )}
       </div>
+
+      <footer style={styles.footer}>
+        <span style={styles.footerLabel}>Built With</span>
+        <div style={styles.techStackRow}>
+          {TECH_STACK.map((tech) => (
+            <span key={tech} style={styles.techStackChip}>
+              {tech}
+            </span>
+          ))}
+        </div>
+      </footer>
     </div>
   );
 };
