@@ -12,6 +12,7 @@ import {
   Legend,
   ReferenceLine,
 } from "recharts";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { StockSummary } from "../types";
 import { API_BASE } from "../utils/portfolioUtils";
 
@@ -41,6 +42,16 @@ interface BenchmarkPoint {
   portfolioAnn: number;
   spyAnn: number;
   nasdaqAnn: number;
+}
+
+interface YearlyGrowthRow {
+  year: string;
+  isPartial: boolean;
+  startValue: number;
+  endValue: number;
+  netContributions: number;
+  marketGain: number;
+  growthPct: number | null;
 }
 
 type PgotPeriod = "3m" | "6m" | "ytd" | "1y" | "2y" | "5y" | "all";
@@ -374,6 +385,10 @@ function fmtDollar(v: number): string {
   return `$${v.toFixed(0)}`;
 }
 
+function fmtUsd(v: number): string {
+  return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
 const cardStyle: React.CSSProperties = {
   flex: 2,
   minWidth: 0,
@@ -423,6 +438,7 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
     "growth" | "dividends" | "holdings" | "annualized" | null
   >(null);
   const [pgotPeriod, setPgotPeriod] = useState<PgotPeriod>("all");
+  const [yearlyBreakdownOpen, setYearlyBreakdownOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -611,6 +627,48 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
         pgotYears = years;
       }
     }
+  }
+
+  // Per-calendar-year growth breakdown — intentionally separate from pgotRoi/pgotCagr
+  // above, which are since-inception figures using lifetime totalInvested. Here, each
+  // year's "market gain" excludes that year's own net contributions, so adding/removing
+  // money doesn't get misread as investment performance.
+  const yearlyGrowth: YearlyGrowthRow[] = [];
+  if (!loading && histWithPnl.length > 0) {
+    const byYear = new Map<string, typeof histWithPnl>();
+    for (const row of histWithPnl) {
+      const year = row.month.slice(0, 4);
+      const bucket = byYear.get(year);
+      if (bucket) bucket.push(row);
+      else byYear.set(year, [row]);
+    }
+    const years = Array.from(byYear.keys()).sort();
+    years.forEach((year, idx) => {
+      const rows = byYear.get(year)!;
+      const endRow = rows[rows.length - 1];
+      const prevRows = idx > 0 ? byYear.get(years[idx - 1])! : null;
+      // First year in the dataset has no prior-year snapshot: use its own first
+      // row as both the start value and the contribution baseline.
+      const startRow = prevRows ? prevRows[prevRows.length - 1] : rows[0];
+      const startInvestedRow = prevRows ? startRow : rows[0];
+
+      const startValue = startRow.totalValue;
+      const endValue = endRow.totalValue;
+      const netContributions =
+        endRow.totalInvested - startInvestedRow.totalInvested;
+      const marketGain = endValue - startValue - netContributions;
+      const growthPct = startValue > 0 ? (marketGain / startValue) * 100 : null;
+
+      yearlyGrowth.push({
+        year,
+        isPartial: idx === years.length - 1 && !endRow.month.endsWith("-12"),
+        startValue,
+        endValue,
+        netContributions,
+        marketGain,
+        growthPct,
+      });
+    });
   }
 
   // % change across the selected period (YTD/1Y/2Y/5Y/ALL) — a time-weighted return computed
@@ -951,6 +1009,89 @@ export default function PortfolioCharts({ summaries }: PortfolioChartsProps) {
             </div>
           );
         })()}
+      {!loading && yearlyGrowth.length > 0 && (
+        <div style={{ marginBottom: "0.5rem" }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setYearlyBreakdownOpen((prev) => !prev);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 0",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            {yearlyBreakdownOpen ? (
+              <ChevronUp size={14} />
+            ) : (
+              <ChevronDown size={14} />
+            )}
+            Yearly Breakdown
+          </button>
+          {yearlyBreakdownOpen && (
+            <div
+              style={{
+                overflowX: "auto",
+                overflowY: "auto",
+                maxHeight: 220,
+                marginTop: "4px",
+              }}
+            >
+              <table style={{ marginTop: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Year</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Net Added</th>
+                    <th>Market Gain</th>
+                    <th>Growth %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yearlyGrowth.map((row) => {
+                    const gainColor =
+                      row.marketGain >= 0
+                        ? "var(--success)"
+                        : "var(--brand-primary)";
+                    return (
+                      <tr key={row.year}>
+                        <td>
+                          {row.year}
+                          {row.isPartial ? " YTD" : ""}
+                        </td>
+                        <td>{fmtUsd(row.startValue)}</td>
+                        <td>{fmtUsd(row.endValue)}</td>
+                        <td>
+                          {row.netContributions >= 0 ? "+" : "-"}
+                          {fmtUsd(Math.abs(row.netContributions))}
+                        </td>
+                        <td style={{ color: gainColor, fontWeight: 600 }}>
+                          {row.marketGain >= 0 ? "+" : "-"}
+                          {fmtUsd(Math.abs(row.marketGain))}
+                        </td>
+                        <td style={{ color: gainColor }}>
+                          {row.growthPct === null
+                            ? "—"
+                            : `${row.growthPct >= 0 ? "+" : ""}${row.growthPct.toFixed(1)}%`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       {loading ? (
         <div style={spinnerWrapStyle}>
           <div className="spinner" />
